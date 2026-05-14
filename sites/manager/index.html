@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #f1f5f9;
+      --surface:  #ffffff;
+      --border:   #e2e8f0;
+      --text:     #0f172a;
+      --muted:    #64748b;
+      --primary:  #4f46e5;
+      --primary-h:#4338ca;
+      --green:    #16a34a;
+      --green-bg: #dcfce7;
+      --amber:    #b45309;
+      --amber-bg: #fef3c7;
+      --red:      #dc2626;
+      --red-bg:   #fee2e2;
+      --shadow:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+      --shadow-lg:0 10px 25px rgba(0,0,0,.12);
+      --radius:   10px;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .header-brand { display: flex; align-items: center; gap: .75rem; }
+    .header-brand svg { color: var(--primary); }
+    .header-brand h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; }
+    .header-brand span { font-size: .8rem; color: var(--muted); font-weight: 400; }
+
+    /* ── Main ── */
+    main { max-width: 960px; margin: 0 auto; padding: 2rem; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+    .toolbar h2 { font-size: 1rem; color: var(--muted); font-weight: 500; }
+    #site-count { color: var(--text); font-weight: 700; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .5rem 1rem;
+      border-radius: 7px;
+      font-size: .875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background .15s, opacity .15s;
+    }
+    .btn-primary  { background: var(--primary); color: #fff; }
+    .btn-primary:hover  { background: var(--primary-h); }
+    .btn-ghost    { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:hover    { background: var(--bg); color: var(--text); }
+    .btn-danger   { background: var(--red-bg); color: var(--red); }
+    .btn-danger:hover   { background: #fecaca; }
+    .btn-sm { padding: .3rem .65rem; font-size: .8rem; }
+
+    /* ── Cards ── */
+    #grid { display: flex; flex-direction: column; gap: 1rem; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 1.25rem;
+      padding: 1.1rem 1.25rem;
+      transition: box-shadow .15s;
+    }
+    .card:hover { box-shadow: var(--shadow-lg); }
+
+    .card-status { display: flex; align-items: center; }
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-green { background: var(--green); box-shadow: 0 0 0 3px var(--green-bg); }
+    .dot-red   { background: var(--red);   box-shadow: 0 0 0 3px var(--red-bg); }
+
+    .card-body { min-width: 0; }
+    .card-name {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: .25rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-size: .8rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+    .card-meta a { color: var(--primary); text-decoration: none; }
+    .card-meta a:hover { text-decoration: underline; }
+    .card-meta .sep { color: var(--border); }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .25rem;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      padding: .15rem .45rem;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .badge-green  { background: var(--green-bg); color: var(--green); }
+    .badge-amber  { background: var(--amber-bg); color: var(--amber); }
+    .badge-red    { background: var(--red-bg);   color: var(--red);   }
+    .badge-gray   { background: var(--bg);       color: var(--muted); }
+    .badge-indigo { background: #ede9fe;          color: #5b21b6;      }
+
+    .card-actions { display: flex; gap: .5rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+    .tunnel-url {
+      font-size: .75rem;
+      color: #5b21b6;
+      text-decoration: none;
+      font-weight: 600;
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tunnel-url:hover { text-decoration: underline; }
+    .btn-tunnel { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
+    .btn-tunnel:hover { background: #ddd6fe; }
+
+    .empty {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--muted);
+      font-size: .95rem;
+    }
+    .empty strong { display: block; font-size: 1.1rem; color: var(--text); margin-bottom: .5rem; }
+
+    /* ── Modal ── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(15,23,42,.4);
+      backdrop-filter: blur(2px);
+      z-index: 100;
+      display: none;
+    }
+    .overlay.open { display: block; }
+
+    .modal {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--surface);
+      border-radius: 14px;
+      box-shadow: var(--shadow-lg);
+      width: min(520px, calc(100vw - 2rem));
+      max-height: 90vh;
+      overflow-y: auto;
+      z-index: 101;
+      display: none;
+    }
+    .modal.open { display: block; }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 { font-size: 1rem; font-weight: 700; }
+    .modal-close {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 1.4rem; line-height: 1;
+      padding: .2rem .4rem; border-radius: 4px;
+    }
+    .modal-close:hover { background: var(--bg); color: var(--text); }
+
+    .modal-body { padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
+
+    .field { display: flex; flex-direction: column; gap: .3rem; }
+    .field label { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .field input {
+      padding: .55rem .75rem;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: .9rem;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--surface);
+      transition: border-color .15s, box-shadow .15s;
+      outline: none;
+    }
+    .field input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+    }
+    .field input::placeholder { color: #94a3b8; }
+
+    /* Toggle switch */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .75rem 1rem;
+      background: var(--bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .toggle-row label { font-size: .875rem; font-weight: 600; cursor: pointer; }
+    .toggle-row small { display: block; font-size: .75rem; color: var(--muted); font-weight: 400; }
+
+    .toggle {
+      position: relative;
+      width: 40px; height: 22px;
+      flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute; inset: 0;
+      background: #cbd5e1;
+      border-radius: 22px;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      left: 3px; top: 3px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+      transition: transform .2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--primary); }
+    .toggle input:checked + .toggle-track::after { transform: translateX(18px); }
+
+    .auth-fields {
+      display: flex; flex-direction: column; gap: 1rem;
+      animation: slideDown .15s ease;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .hidden { display: none !important; }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: .75rem;
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .error-banner {
+      background: var(--red-bg);
+      color: var(--red);
+      border-radius: 7px;
+      padding: .65rem .9rem;
+      font-size: .85rem;
+      font-weight: 500;
+    }
+
+    /* ── Toasts ── */
+    #toasts {
+      position: fixed;
+      bottom: 1.5rem; right: 1.5rem;
+      display: flex; flex-direction: column; gap: .5rem;
+      z-index: 200;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--text);
+      color: #fff;
+      padding: .65rem 1rem;
+      border-radius: 8px;
+      font-size: .85rem;
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
+      animation: toastIn .2s ease, toastOut .3s ease 2.7s forwards;
+      max-width: 300px;
+    }
+    .toast-error { background: var(--red); }
+    @keyframes toastIn  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes toastOut { from { opacity:1; } to { opacity:0; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+    </svg>
+    <h1>Site Manager <span>— Multi-Port Web Server</span></h1>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <h2><span id="site-count">0</span> sites configured</h2>
+    <div style="display:flex;gap:.5rem;align-items:center;">
+      <button class="btn btn-ghost" onclick="openTunnelConfig()" id="btn-tunnel-cfg" title="Configure tunnel server settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Tunnel Config <span id="tunnel-cfg-status" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:#cbd5e1;margin-left:4px;vertical-align:middle;"></span>
+      </button>
+      <button class="btn btn-primary" onclick="openModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Add Site
+      </button>
+    </div>
+  </div>
+  <div id="grid"></div>
+</main>
+
+<!-- Modal overlay -->
+<div class="overlay" id="overlay" onclick="closeModal()"></div>
+
+<!-- Add / Edit modal -->
+<div class="modal" id="modal" role="dialog" aria-modal="true">
+  <div class="modal-header">
+    <h2 id="modal-title">Add Site</h2>
+    <button class="modal-close" onclick="closeModal()" aria-label="Close">×</button>
+  </div>
+  <form id="site-form" onsubmit="handleSubmit(event)" novalidate>
+    <div class="modal-body">
+      <div id="form-error" class="error-banner hidden"></div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="f-name">Site Name</label>
+          <input id="f-name" name="name" type="text" placeholder="My Site" required>
+        </div>
+        <div class="field">
+          <label for="f-port">Port</label>
+          <input id="f-port" name="port" type="number" min="1" max="65535" placeholder="3000" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="f-root">Root Directory</label>
+          <input id="f-root" name="root" type="text" placeholder="./sites/mysite" required>
+        </div>
+        <div class="field">
+          <label for="f-index">Index File <span style="font-weight:400;text-transform:none">(optional)</span></label>
+          <input id="f-index" name="index" type="text" placeholder="index.html">
+        </div>
+      </div>
+
+      <!-- Auth toggle -->
+      <div class="toggle-row">
+        <label for="f-auth-toggle">
+          Password Protection
+          <small>Require login to access this site</small>
+        </label>
+        <div class="toggle">
+          <input type="checkbox" id="f-auth-toggle" onchange="toggleAuthFields(this)">
+          <label for="f-auth-toggle" class="toggle-track"></label>
+        </div>
+      </div>
+
+      <!-- Auth fields -->
+      <div class="auth-fields hidden" id="auth-fields">
+        <div class="form-row">
+          <div class="field">
+            <label for="f-user">Username</label>
+            <input id="f-user" name="user" type="text" placeholder="admin" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="f-pass">Password</label>
+            <input id="f-pass" name="pass" type="text" placeholder="secret" autocomplete="off">
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-realm">Realm <span style="font-weight:400;text-transform:none">(browser prompt label, optional)</span></label>
+          <input id="f-realm" name="realm" type="text" placeholder="Protected Area">
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="submit-btn">Add Site</button>
+    </div>
+  </form>
+</div>
+
+<!-- Tunnel Config modal -->
+<div class="modal" id="tunnel-modal" role="dialog" aria-modal="true" style="width:min(580px,calc(100vw - 2rem))">
+  <div class="modal-header">
+    <h2>Tunnel Configuration</h2>
+    <button class="modal-close" onclick="closeTunnelModal()" aria-label="Close">×</button>
+  </div>
+  <div class="modal-body">
+    <div id="tunnel-cfg-error" class="error-banner hidden"></div>
+
+    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.25rem;">Server <span style="font-weight:400;text-transform:none">(runs on your VPS)</span></div>
+    <div style="display:flex;flex-direction:column;gap:.85rem;padding:1rem;background:var(--bg);border-radius:8px;border:1px solid var(--border);">
+      <div class="form-row">
+        <div class="field">
+          <label for="tc-domain">Domain</label>
+          <input id="tc-domain" type="text" placeholder="yourdomain.com" oninput="syncClientHost(this.value)">
+        </div>
+        <div class="field">
+          <label for="tc-ctrl-port">Control Port</label>
+          <input id="tc-ctrl-port" type="number" placeholder="7000" value="7000" min="1" max="65535">
+        </div>
+      </div>
+      <div class="field">
+        <label for="tc-cert">TLS Certificate File <span style="font-weight:400;text-transform:none">(fullchain.pem)</span></label>
+        <input id="tc-cert" type="text" placeholder="/etc/letsencrypt/live/yourdomain.com/fullchain.pem">
+      </div>
+      <div class="field">
+        <label for="tc-key">TLS Key File <span style="font-weight:400;text-transform:none">(privkey.pem)</span></label>
+        <input id="tc-key" type="text" placeholder="/etc/letsencrypt/live/yourdomain.com/privkey.pem">
+      </div>
+      <div class="field">
+        <label for="tc-token">Shared Token <span style="font-weight:400;text-transform:none">(min 16 chars)</span></label>
+        <div style="display:flex;gap:.5rem;">
+          <input id="tc-token" type="password" placeholder="long-random-secret" style="flex:1" oninput="syncClientToken(this.value)">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="toggleTokenVis()" id="btn-show-token">Show</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="generateToken()">Generate</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:.85rem 0 .25rem;">Client <span style="font-weight:400;text-transform:none">(auto-filled from above)</span></div>
+    <div style="display:flex;flex-direction:column;gap:.85rem;padding:1rem;background:var(--bg);border-radius:8px;border:1px solid var(--border);">
+      <div class="form-row">
+        <div class="field">
+          <label for="tc-client-host">Server Host</label>
+          <input id="tc-client-host" type="text" placeholder="yourdomain.com">
+        </div>
+        <div class="field">
+          <label for="tc-client-port">Control Port</label>
+          <input id="tc-client-port" type="number" placeholder="7000" value="7000" min="1" max="65535">
+        </div>
+      </div>
+      <div class="field" style="display:none">
+        <input id="tc-client-token" type="hidden">
+      </div>
+      <div class="toggle-row">
+        <label for="tc-tls">
+          TLS on control connection
+          <small>Enable if your control port uses HTTPS</small>
+        </label>
+        <div class="toggle">
+          <input type="checkbox" id="tc-tls">
+          <label for="tc-tls" class="toggle-track"></label>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" onclick="closeTunnelModal()">Cancel</button>
+    <button type="button" class="btn btn-primary" onclick="saveTunnelConfig()">Save Config</button>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toasts"></div>
+
+<script>
+  let sites = [];
+  let editingPort = null; // null = add mode, number = edit mode
+  let managerPort = location.port;
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+
+  async function init() {
+    await refresh();
+    // Load tunnel config status dot without opening the modal
+    fetch('/api/tunnel/config')
+      .then(r => r.json())
+      .then(d => { if (d.ok) updateTunnelCfgStatus(d.config); })
+      .catch(() => {});
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch('/api/sites');
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      sites = data.sites;
+      managerPort = String(data.managerPort || managerPort);
+      renderSites();
+    } catch (e) {
+      showGrid('<div class="empty"><strong>Failed to load sites</strong>' + escHtml(e.message) + '</div>');
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  function renderSites() {
+    document.getElementById('site-count').textContent = sites.length;
+
+    if (sites.length === 0) {
+      showGrid(`<div class="empty">
+        <strong>No sites yet</strong>
+        Click <em>Add Site</em> to configure your first site.
+      </div>`);
+      return;
+    }
+
+    showGrid(sites.map(renderCard).join(''));
+  }
+
+  function renderCard(site) {
+    const running   = site.running;
+    const url       = `http://localhost:${site.port}`;
+    const authLabel = site.auth
+      ? `<span class="badge badge-amber">🔒 auth</span>`
+      : `<span class="badge badge-green">🌐 open</span>`;
+    const runBadge  = running
+      ? `<span class="badge badge-green">running</span>`
+      : `<span class="badge badge-red">stopped</span>`;
+
+    const indexFile = site.index || 'index.html';
+
+    const tunnelSection = site.tunnelUrl
+      ? `<a href="${escHtml(site.tunnelUrl)}" target="_blank" rel="noopener" class="tunnel-url" title="${escHtml(site.tunnelUrl)}">🔗 ${escHtml(site.tunnelUrl)}</a>
+         <button class="btn btn-danger btn-sm" onclick="stopTunnel(${site.port})">Stop Tunnel</button>`
+      : `<button class="btn btn-tunnel btn-sm" onclick="startTunnel(${site.port}, this)">🔗 Tunnel</button>`;
+
+    return `<div class="card">
+      <div class="card-status">
+        <div class="dot ${running ? 'dot-green' : 'dot-red'}" title="${running ? 'Running' : 'Stopped'}"></div>
+      </div>
+      <div class="card-body">
+        <div class="card-name">
+          ${escHtml(site.name)}
+          ${authLabel}
+          ${runBadge}
+        </div>
+        <div class="card-meta">
+          <a href="${url}" target="_blank" rel="noopener">:${site.port}</a>
+          <span class="sep">·</span>
+          <span title="Root directory">${escHtml(site.root)}</span>
+          <span class="sep">·</span>
+          <span title="Index file">${escHtml(indexFile)}</span>
+          ${site.auth ? `<span class="sep">·</span><span title="Auth realm">${escHtml(site.auth.realm || site.name)}</span>` : ''}
+        </div>
+      </div>
+      <div class="card-actions">
+        ${tunnelSection}
+        <button class="btn btn-ghost btn-sm" onclick="openEditModal(${site.port})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDelete(${site.port}, ${JSON.stringify(escHtml(site.name))})">Delete</button>
+      </div>
+    </div>`;
+  }
+
+  function showGrid(html) {
+    document.getElementById('grid').innerHTML = html;
+  }
+
+  // ── Modal open/close ──────────────────────────────────────────────────────
+
+  function openModal() {
+    editingPort = null;
+    document.getElementById('modal-title').textContent = 'Add Site';
+    document.getElementById('submit-btn').textContent = 'Add Site';
+    document.getElementById('site-form').reset();
+    hideAuthFields();
+    hideError();
+    showModal();
+    document.getElementById('f-name').focus();
+  }
+
+  function openEditModal(port) {
+    const site = sites.find(s => s.port === port);
+    if (!site) return;
+    editingPort = port;
+    document.getElementById('modal-title').textContent = 'Edit Site';
+    document.getElementById('submit-btn').textContent = 'Save Changes';
+    hideError();
+
+    document.getElementById('f-name').value  = site.name;
+    document.getElementById('f-port').value  = site.port;
+    document.getElementById('f-root').value  = site.root;
+    document.getElementById('f-index').value = site.index || '';
+
+    const hasAuth = !!site.auth;
+    document.getElementById('f-auth-toggle').checked = hasAuth;
+    if (hasAuth) {
+      showAuthFields();
+      document.getElementById('f-user').value  = site.auth.user || '';
+      document.getElementById('f-pass').value  = site.auth.pass || '';
+      document.getElementById('f-realm').value = site.auth.realm || '';
+    } else {
+      hideAuthFields();
+    }
+
+    showModal();
+    document.getElementById('f-name').focus();
+  }
+
+  function showModal() {
+    document.getElementById('overlay').classList.add('open');
+    document.getElementById('modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    document.getElementById('overlay').classList.remove('open');
+    document.getElementById('modal').classList.remove('open');
+    document.getElementById('tunnel-modal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function toggleAuthFields(checkbox) {
+    if (checkbox.checked) showAuthFields(); else hideAuthFields();
+  }
+  function showAuthFields() { document.getElementById('auth-fields').classList.remove('hidden'); }
+  function hideAuthFields() { document.getElementById('auth-fields').classList.add('hidden'); }
+
+  // ── Form submit ───────────────────────────────────────────────────────────
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    hideError();
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = editingPort ? 'Saving…' : 'Adding…';
+
+    const site = buildSiteFromForm();
+
+    try {
+      let res, data;
+      if (editingPort === null) {
+        res  = await fetch('/api/sites', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(site) });
+      } else {
+        res  = await fetch(`/api/sites/${editingPort}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(site) });
+      }
+      data = await res.json();
+
+      if (!data.ok) {
+        showError(data.error);
+        return;
+      }
+
+      sites = data.sites;
+      renderSites();
+      closeModal();
+      toast(editingPort ? 'Site updated successfully.' : 'Site added and started.');
+    } catch (err) {
+      showError('Network error: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = editingPort ? 'Save Changes' : 'Add Site';
+    }
+  }
+
+  function buildSiteFromForm() {
+    const site = {
+      name:  document.getElementById('f-name').value.trim(),
+      port:  parseInt(document.getElementById('f-port').value, 10),
+      root:  document.getElementById('f-root').value.trim(),
+    };
+    const idx = document.getElementById('f-index').value.trim();
+    if (idx) site.index = idx;
+
+    if (document.getElementById('f-auth-toggle').checked) {
+      site.auth = {
+        user:  document.getElementById('f-user').value.trim(),
+        pass:  document.getElementById('f-pass').value.trim(),
+      };
+      const realm = document.getElementById('f-realm').value.trim();
+      if (realm) site.auth.realm = realm;
+    }
+
+    return site;
+  }
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+
+  async function confirmDelete(port, name) {
+    if (!confirm(`Delete "${name}" (port ${port})?\n\nThis will stop the server and remove it from config.`)) return;
+
+    try {
+      const res  = await fetch(`/api/sites/${port}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.ok) return toast(data.error, 'error');
+      sites = data.sites;
+      renderSites();
+      toast(`"${name}" deleted.`);
+    } catch (err) {
+      toast('Network error: ' + err.message, 'error');
+    }
+  }
+
+  // ── Tunnel ────────────────────────────────────────────────────────────────
+
+  async function startTunnel(port, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Connecting…';
+    try {
+      const res  = await fetch(`/api/tunnel/${port}`, { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) {
+        toast(data.error, 'error');
+        btn.disabled = false;
+        btn.textContent = '🔗 Tunnel';
+        return;
+      }
+      sites = data.sites;
+      renderSites();
+      toast(`Tunnel active → ${data.publicUrl}`);
+    } catch (err) {
+      toast('Network error: ' + err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = '🔗 Tunnel';
+    }
+  }
+
+  async function stopTunnel(port) {
+    try {
+      const res  = await fetch(`/api/tunnel/${port}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.ok) return toast(data.error, 'error');
+      sites = data.sites;
+      renderSites();
+      toast('Tunnel stopped.');
+    } catch (err) {
+      toast('Network error: ' + err.message, 'error');
+    }
+  }
+
+  // ── Tunnel Config modal ───────────────────────────────────────────────────
+
+  const PLACEHOLDER_TOKEN = 'CHANGE_ME_USE_A_LONG_RANDOM_SECRET';
+  const PLACEHOLDER_DOMAIN = 'yourdomain.com';
+
+  async function openTunnelConfig() {
+    hideTunnelCfgError();
+    try {
+      const res  = await fetch('/api/tunnel/config');
+      const data = await res.json();
+      const s = (data.config && data.config.server) || {};
+      const c = (data.config && data.config.client) || {};
+
+      document.getElementById('tc-domain').value       = s.domain      || '';
+      document.getElementById('tc-ctrl-port').value    = s.controlPort || 7000;
+      document.getElementById('tc-cert').value         = s.certFile    || '';
+      document.getElementById('tc-key').value          = s.keyFile     || '';
+      document.getElementById('tc-token').value        = s.token       || '';
+      document.getElementById('tc-client-host').value  = c.serverHost  || s.domain || '';
+      document.getElementById('tc-client-port').value  = c.controlPort || s.controlPort || 7000;
+      document.getElementById('tc-tls').checked        = !!c.tls;
+
+      updateTunnelCfgStatus(data.config);
+    } catch (e) {
+      // No config yet — show empty form
+    }
+    document.getElementById('overlay').classList.add('open');
+    document.getElementById('tunnel-modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('tc-domain').focus();
+  }
+
+  function closeTunnelModal() {
+    document.getElementById('overlay').classList.remove('open');
+    document.getElementById('tunnel-modal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function syncClientHost(val) {
+    const hostEl = document.getElementById('tc-client-host');
+    if (!hostEl.dataset.edited) hostEl.value = val;
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('tc-client-host').addEventListener('input', function() {
+      this.dataset.edited = '1';
+    });
+  });
+
+  function syncClientToken(val) {
+    document.getElementById('tc-client-token').value = val;
+  }
+
+  function toggleTokenVis() {
+    const inp = document.getElementById('tc-token');
+    const btn = document.getElementById('btn-show-token');
+    if (inp.type === 'password') { inp.type = 'text';     btn.textContent = 'Hide'; }
+    else                         { inp.type = 'password'; btn.textContent = 'Show'; }
+  }
+
+  function generateToken() {
+    const arr = new Uint8Array(24);
+    crypto.getRandomValues(arr);
+    const token = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+    const inp = document.getElementById('tc-token');
+    inp.value = token;
+    inp.type  = 'text';
+    document.getElementById('btn-show-token').textContent = 'Hide';
+    syncClientToken(token);
+    toast('Token generated — save the config to apply.');
+  }
+
+  async function saveTunnelConfig() {
+    hideTunnelCfgError();
+    const token = document.getElementById('tc-token').value.trim();
+    const cfg = {
+      server: {
+        domain:      document.getElementById('tc-domain').value.trim(),
+        controlPort: parseInt(document.getElementById('tc-ctrl-port').value || '7000', 10),
+        certFile:    document.getElementById('tc-cert').value.trim(),
+        keyFile:     document.getElementById('tc-key').value.trim(),
+        token,
+        requestTimeout: 30000,
+      },
+      client: {
+        serverHost:  document.getElementById('tc-client-host').value.trim() || document.getElementById('tc-domain').value.trim(),
+        controlPort: parseInt(document.getElementById('tc-client-port').value || '7000', 10),
+        token,
+        tls:         document.getElementById('tc-tls').checked,
+      },
+    };
+
+    const saveBtn = document.querySelector('#tunnel-modal .btn-primary');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+
+    try {
+      const res  = await fetch('/api/tunnel/config', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(cfg),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        showTunnelCfgError(data.error);
+        return;
+      }
+      updateTunnelCfgStatus(cfg);
+      closeTunnelModal();
+      toast('Tunnel config saved.');
+    } catch (err) {
+      showTunnelCfgError('Network error: ' + err.message);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Config';
+    }
+  }
+
+  function updateTunnelCfgStatus(cfg) {
+    const dot = document.getElementById('tunnel-cfg-status');
+    if (!dot) return;
+    const s = cfg && cfg.server;
+    const configured = s && s.domain && s.domain !== PLACEHOLDER_DOMAIN
+                        && s.token  && s.token  !== PLACEHOLDER_TOKEN
+                        && s.certFile && s.keyFile;
+    dot.style.background = configured ? 'var(--green)' : '#cbd5e1';
+    dot.title = configured ? 'Configured' : 'Not configured';
+  }
+
+  function showTunnelCfgError(msg) {
+    const el = document.getElementById('tunnel-cfg-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+  function hideTunnelCfgError() {
+    document.getElementById('tunnel-cfg-error').classList.add('hidden');
+  }
+
+  // ── Error banner ──────────────────────────────────────────────────────────
+
+  function showError(msg) {
+    const el = document.getElementById('form-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  function hideError() {
+    document.getElementById('form-error').classList.add('hidden');
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+
+  function toast(msg, type = 'success') {
+    const el = document.createElement('div');
+    el.className = 'toast' + (type === 'error' ? ' toast-error' : '');
+    el.textContent = msg;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+  }
+
+  // ── Utils ─────────────────────────────────────────────────────────────────
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  // Close modal on Escape
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  init();
+</script>
+</body>
+</html>

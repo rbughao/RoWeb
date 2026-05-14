@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Internal Wiki</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #fafaf8;
+      color: #2d2d2d;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .layout {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    header {
+      border-bottom: 2px solid #d4c89a;
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    header h1 { font-size: 2rem; color: #3d3000; }
+    header p  { font-size: 0.875rem; color: #888; margin-top: 0.25rem; }
+    .notice {
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      border-radius: 6px;
+      padding: 0.65rem 1rem;
+      font-size: 0.875rem;
+      color: #92400e;
+      margin-bottom: 2rem;
+      font-family: system-ui, sans-serif;
+    }
+    .toc {
+      background: #f3f0e8;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 2rem;
+      font-family: system-ui, sans-serif;
+    }
+    .toc h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 0.5rem; }
+    .toc ol { padding-left: 1.25rem; }
+    .toc li { padding: 0.2rem 0; font-size: 0.9rem; }
+    .toc a  { color: #2563eb; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    section { margin-bottom: 2.5rem; }
+    section h2 {
+      font-size: 1.35rem;
+      color: #3d3000;
+      border-bottom: 1px solid #e5e0cc;
+      padding-bottom: 0.35rem;
+      margin-bottom: 0.85rem;
+    }
+    section p { line-height: 1.8; color: #444; margin-bottom: 0.75rem; }
+    section ul { padding-left: 1.5rem; color: #444; line-height: 1.8; }
+    code {
+      background: #f0ece0;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      font-size: 0.875em;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <header>
+      <h1>Internal Wiki</h1>
+      <p>Last updated: 2026-05-13 &nbsp;·&nbsp; Team access only</p>
+    </header>
+
+    <div class="notice">🔒 Team access only. Do not share URLs or credentials outside the organisation.</div>
+
+    <nav class="toc">
+      <h3>Contents</h3>
+      <ol>
+        <li><a href="#onboarding">Onboarding</a></li>
+        <li><a href="#architecture">Architecture Overview</a></li>
+        <li><a href="#runbook">Runbook</a></li>
+      </ol>
+    </nav>
+
+    <section id="onboarding">
+      <h2>Onboarding</h2>
+      <p>Welcome to the team. Before your first day, make sure you have access to all the necessary systems and have completed the security awareness training.</p>
+      <p>Required accounts to set up:</p>
+      <ul>
+        <li>VPN — request access via IT helpdesk</li>
+        <li>Code repository — your manager will send an invite</li>
+        <li>This wiki — credentials shared over encrypted channel</li>
+      </ul>
+    </section>
+
+    <section id="architecture">
+      <h2>Architecture Overview</h2>
+      <p>The platform is composed of several independently deployable services. Each service owns its data store and communicates via internal HTTP APIs. There is no shared database.</p>
+      <p>Key services: <code>auth-service</code>, <code>api-gateway</code>, <code>worker</code>, and <code>static-server</code> (this server). All services run on Node.js 20+ with zero external runtime dependencies.</p>
+      <p>Deployment is handled via a simple <code>node server.js</code> invocation on each host. Configuration is injected through <code>config.json</code> at the project root.</p>
+    </section>
+
+    <section id="runbook">
+      <h2>Runbook</h2>
+      <p>If a site fails to start (port already in use), the server logs the error and continues bringing up the remaining sites. To diagnose:</p>
+      <ul>
+        <li>Check which process owns the port: <code>netstat -ano | findstr :PORT</code></li>
+        <li>Restart the offending process or choose a different port in <code>config.json</code></li>
+        <li>Re-run <code>node server.js</code></li>
+      </ul>
+      <p>To gracefully shut down all sites, press <code>Ctrl+C</code> in the terminal where the server is running.</p>
+    </section>
+  </div>
+</body>
+</html>

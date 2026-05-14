@@ -1,0 +1,37 @@
+{
+  "manager": {
+    "port": 4000,
+    "auth": {
+      "user": "admin",
+      "pass": "manager123",
+      "realm": "Site Manager"
+    }
+  },
+  "sites": [
+    {
+      "name": "Public Home",
+      "port": 3000,
+      "root": "./sites/home"
+    },
+    {
+      "name": "Admin Dashboard",
+      "port": 3001,
+      "root": "./sites/admin",
+      "auth": {
+        "user": "admin",
+        "pass": "secret123",
+        "realm": "Admin Area"
+      }
+    },
+    {
+      "name": "Internal Wiki",
+      "port": 3002,
+      "root": "./sites/wiki",
+      "index": "wiki.html",
+      "auth": {
+        "user": "team",
+        "pass": "wiki2024"
+      }
+    }
+  ]
+}

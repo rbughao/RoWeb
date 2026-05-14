@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome — Multi-Port Server</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f5f7fa;
+      color: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      padding: 2.5rem 3rem;
+      max-width: 560px;
+      width: 100%;
+    }
+    h1 { font-size: 1.8rem; margin-bottom: 0.75rem; color: #2563eb; }
+    p  { line-height: 1.6; color: #555; margin-bottom: 1.5rem; }
+    h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 0.5rem; }
+    ul { list-style: none; }
+    ul li {
+      padding: 0.4rem 0;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    ul li:last-child { border-bottom: none; }
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+    .open { background: #dcfce7; color: #16a34a; }
+    .auth { background: #fef9c3; color: #ca8a04; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Welcome to the Multi-Port Server</h1>
+    <p>This Node.js server hosts multiple independent sites on separate ports, each with its own optional password protection. No external dependencies — just built-in Node.js modules.</p>
+
+    <h2>Available Sites</h2>
+    <ul>
+      <li>
+        <a href="http://localhost:3000">Public Home — :3000</a>
+        <span class="badge open">open</span>
+      </li>
+      <li>
+        <a href="http://localhost:3001">Admin Dashboard — :3001</a>
+        <span class="badge auth">auth</span>
+      </li>
+      <li>
+        <a href="http://localhost:3002">Internal Wiki — :3002</a>
+        <span class="badge auth">auth</span>
+      </li>
+    </ul>
+  </div>
+</body>
+</html>

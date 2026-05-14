@@ -1,0 +1,12 @@
+# Node
+node_modules/
+
+# Claude Code local settings
+.claude/
+
+# Keep the tunnel config out of version control — it contains your secret token and cert paths
+tunnel/tunnel-config.json
+
+# OS
+.DS_Store
+Thumbs.db
