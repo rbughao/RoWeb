@@ -103,11 +103,22 @@ function secureCredentials() {
   }
 }
 
+// Origins the Site Manager can be viewed on — the only pages allowed to embed sites in its preview pane
+function managerOrigins() {
+  const { port, host, allowedHosts = [] } = config.manager;
+  if (!port) return '';
+  // CSP source expressions can't contain IPv6 literals, so only names and IPv4 addresses are listed
+  const hosts = new Set(['localhost', '127.0.0.1', ...allowedHosts.map(h => String(h).toLowerCase())]);
+  if (host && net.isIPv4(host) && host !== '0.0.0.0') hosts.add(host);
+  return [...hosts].filter(h => /^[a-z0-9.-]+$/.test(h)).map(h => `http://${h}:${port}`).join(' ');
+}
+
 function createSiteHandler(site) {
   const resolvedSite = { ...site, root: path.resolve(__dirname, site.root) };
+  const frameAncestors = managerOrigins();
 
   return async (req, res) => {
-    setSiteHeaders(res);
+    setSiteHeaders(res, frameAncestors);
 
     const origWriteHead = res.writeHead.bind(res);
     let statusCode = 200;
@@ -204,12 +215,30 @@ const siteManager = {
   async updateSite(oldPort, newSite) {
     passwords.hashSiteSecrets(newSite);
     // A tunnel would otherwise keep exposing whatever ends up on the old port
-    if (newSite.port !== oldPort) this.stopTunnel(oldPort);
+    if (newSite.port !== oldPort || newSite.paused) this.stopTunnel(oldPort);
     await this.stopSite(oldPort);
-    await this.startSite(newSite);
+    if (!newSite.paused) await this.startSite(newSite);
     const idx = this.config.sites.findIndex(s => s.port === oldPort);
     if (idx !== -1) this.config.sites[idx] = newSite;
     else this.config.sites.push(newSite);
+    this.writeConfig();
+  },
+
+  // Paused sites don't listen at all, so nothing is served (not even an error page)
+  async pauseSite(port) {
+    const site = this.config.sites.find(s => s.port === port);
+    if (!site) throw new Error(`No site is configured on port ${port}.`);
+    this.stopTunnel(port);
+    await this.stopSite(port);
+    site.paused = true;
+    this.writeConfig();
+  },
+
+  async resumeSite(port) {
+    const site = this.config.sites.find(s => s.port === port);
+    if (!site) throw new Error(`No site is configured on port ${port}.`);
+    if (!this.servers.has(port)) await this.startSite(site);
+    delete site.paused;
     this.writeConfig();
   },
 
@@ -237,7 +266,7 @@ const siteManager = {
 };
 
 // Start all sites (errors are non-fatal)
-Promise.allSettled(config.sites.map(site => siteManager.startSite(site))).then(() => {
+Promise.allSettled(config.sites.filter(s => !s.paused).map(site => siteManager.startSite(site))).then(() => {
   printStartupTable(config.sites);
 
   if (config.manager.port) {

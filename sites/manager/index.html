@@ -8,176 +8,359 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:       #f1f5f9;
+      --page:     #f7f5f3;
       --surface:  #ffffff;
-      --border:   #e2e8f0;
-      --text:     #0f172a;
-      --muted:    #64748b;
-      --primary:  #4f46e5;
-      --primary-h:#4338ca;
-      --green:    #16a34a;
-      --green-bg: #dcfce7;
-      --amber:    #b45309;
-      --amber-bg: #fef3c7;
-      --red:      #dc2626;
-      --red-bg:   #fee2e2;
-      --shadow:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
-      --shadow-lg:0 10px 25px rgba(0,0,0,.12);
-      --radius:   10px;
+      --glass:    rgba(255,255,255,.62);
+      --bg:       #f3f1ee;              /* soft fill: inputs, inner panels */
+      --border:   rgba(28,28,40,.08);
+      --text:     #1d1d1f;
+      --muted:    #8b8893;
+      --faint:    #b3b0b8;
+      --ink:      #1d1d1f;              /* primary buttons */
+      --primary:  #4a74e0;              /* accent: focus, toggles, links */
+      --primary-h:#3a62c9;
+      --green:    #2f9e5b;
+      --green-bg: rgba(47,158,91,.12);
+      --amber:    #b0681c;
+      --amber-bg: rgba(242,163,92,.18);
+      --red:      #cf4a4a;
+      --red-bg:   rgba(207,74,74,.10);
+      --blue-bg:  rgba(74,116,224,.12);
+      --shadow:   0 1px 2px rgba(30,30,50,.04), 0 4px 14px rgba(30,30,50,.05);
+      --shadow-lg:0 18px 50px rgba(30,30,60,.12);
+      --radius:   14px;
+      --font: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     }
 
+    html, body { height: 100%; }
     body {
-      font-family: system-ui, -apple-system, sans-serif;
-      background: var(--bg);
+      font-family: var(--font);
+      background: var(--page);
       color: var(--text);
-      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+    /* Soft peach → blue aurora across the top, fading to warm white */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: -10% -5% 35% -5%;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        radial-gradient(38% 60% at 34% 12%, rgba(246,160,128,.80), transparent 70%),
+        radial-gradient(30% 50% at 52% 0%,  rgba(226,170,170,.55), transparent 70%),
+        radial-gradient(42% 65% at 78% 4%,  rgba(118,158,232,.85), transparent 70%),
+        radial-gradient(30% 55% at 98% 20%, rgba(150,185,240,.70), transparent 70%);
+      filter: blur(40px);
     }
 
-    /* ── Header ── */
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 2rem;
+    /* ── App shell: sidebar + workspace ── */
+    .app {
+      display: grid;
+      grid-template-columns: minmax(290px, 360px) 1fr;
+      height: 100vh;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: rgba(255,255,255,.38);
+      backdrop-filter: blur(24px) saturate(1.2);
+      -webkit-backdrop-filter: blur(24px) saturate(1.2);
+      border-right: 1px solid var(--border);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: 1.4rem 1.4rem 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -.01em;
+    }
+    .brand svg { color: var(--text); opacity: .8; }
+
+    .nav { display: flex; flex-direction: column; gap: 2px; padding: .25rem .75rem .5rem; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      width: 100%;
+      padding: .6rem .7rem;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-size: .98rem;
+      text-align: left;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .nav-item:hover { background: rgba(28,28,40,.05); }
+    .nav-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+    .nav-item svg { flex-shrink: 0; opacity: .75; }
+    #tunnel-cfg-status { margin-left: auto !important; }
+
+    .section-label {
+      display: flex;
+      align-items: baseline;
+      gap: .4rem;
+      padding: 1rem 1.45rem .45rem;
+      font-size: .82rem;
+      color: var(--faint);
+      font-weight: 500;
+    }
+    #site-count { color: var(--muted); }
+
+    .site-list { flex: 1; overflow-y: auto; padding: 0 .75rem 1rem; }
+    .sidebar-foot {
+      padding: .9rem 1.45rem 1.1rem;
+      font-size: .78rem;
+      color: var(--faint);
+      border-top: 1px solid var(--border);
+    }
+
+    .workspace {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
       height: 64px;
+      padding: 0 1.75rem;
+      flex-shrink: 0;
+    }
+    .lab-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -.01em;
+      color: var(--text);
+    }
+    .lab-mark::before {
+      content: '';
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #f4a283 0%, #c9a3c4 50%, #7ea4ea 100%);
+      box-shadow: 0 0 0 3px rgba(255,255,255,.6);
+    }
+
+    /* ── Preview card ── */
+    .preview {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      margin: 0 1.5rem 1.5rem;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,.7);
+      border-radius: 22px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+    .preview-bar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      gap: .75rem;
+      flex-wrap: wrap;
+      padding: .8rem 1rem;
     }
-    .header-brand { display: flex; align-items: center; gap: .75rem; }
-    .header-brand svg { color: var(--primary); }
-    .header-brand h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; }
-    .header-brand span { font-size: .8rem; color: var(--muted); font-weight: 400; }
-
-    /* ── Main ── */
-    main { max-width: 960px; margin: 0 auto; padding: 2rem; }
-
-    .toolbar {
+    .preview-title { display: flex; align-items: center; gap: .55rem; min-width: 0; font-weight: 600; }
+    .preview-title strong { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .preview-address {
+      flex: 1;
+      min-width: 160px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1.5rem;
+      gap: .5rem;
+      padding: .5rem 1rem;
+      background: rgba(255,255,255,.75);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: .85rem;
+      color: var(--muted);
+      overflow: hidden;
     }
-    .toolbar h2 { font-size: 1rem; color: var(--muted); font-weight: 500; }
-    #site-count { color: var(--text); font-weight: 700; }
+    .preview-address a { color: var(--text); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .preview-address a:hover { text-decoration: underline; }
+    .preview-address .tunnel-url { margin-left: auto; flex-shrink: 1; }
+    .preview-actions { display: flex; gap: .4rem; }
+    .preview-frame {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      margin: 0 .6rem .6rem;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--border);
+    }
+    .preview-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+    .preview-empty {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: .5rem; padding: 2rem; text-align: center;
+      color: var(--muted); background: #fff;
+    }
+    .preview-empty strong { color: var(--text); font-size: 1.6rem; font-weight: 500; letter-spacing: -.02em; }
+
+    @media (max-width: 860px) {
+      body { overflow: auto; }
+      .app { grid-template-columns: 1fr; height: auto; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
+      .site-list { max-height: 45vh; }
+      .sidebar-foot { display: none; }
+      /* Keep "Bughao Lab" in the page's top-right corner, level with the brand */
+      .topbar { position: absolute; top: 1.35rem; right: 1.2rem; height: auto; padding: 0; }
+      .workspace { padding-top: .75rem; }
+      .preview { margin: 0 .75rem .75rem; min-height: 75vh; }
+    }
 
     /* ── Buttons ── */
     .btn {
       display: inline-flex;
       align-items: center;
       gap: .4rem;
-      padding: .5rem 1rem;
-      border-radius: 7px;
+      padding: .55rem 1.1rem;
+      border-radius: 999px;
+      font: inherit;
       font-size: .875rem;
-      font-weight: 600;
+      font-weight: 500;
       cursor: pointer;
       border: none;
-      transition: background .15s, opacity .15s;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background .15s, color .15s, box-shadow .15s;
     }
-    .btn-primary  { background: var(--primary); color: #fff; }
-    .btn-primary:hover  { background: var(--primary-h); }
-    .btn-ghost    { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-    .btn-ghost:hover    { background: var(--bg); color: var(--text); }
-    .btn-danger   { background: var(--red-bg); color: var(--red); }
-    .btn-danger:hover   { background: #fecaca; }
-    .btn-sm { padding: .3rem .65rem; font-size: .8rem; }
+    .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .btn:disabled { opacity: .55; cursor: default; }
+    .btn-primary  { background: var(--ink); color: #fff; }
+    .btn-primary:hover  { background: #000; }
+    .btn-ghost    { background: rgba(255,255,255,.7); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+    .btn-ghost:hover    { background: #fff; }
+    .btn-danger   { background: transparent; color: var(--red); }
+    .btn-danger:hover   { background: var(--red-bg); }
+    .btn-sm { padding: .3rem .75rem; font-size: .8rem; }
 
-    /* ── Cards ── */
-    #grid { display: flex; flex-direction: column; gap: 1rem; }
+    /* ── Site list items ── */
+    #grid { display: flex; flex-direction: column; gap: 4px; }
 
     .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
       display: grid;
-      grid-template-columns: auto 1fr auto;
+      grid-template-columns: auto 1fr;
       align-items: center;
-      gap: 1.25rem;
-      padding: 1.1rem 1.25rem;
-      transition: box-shadow .15s;
+      gap: .3rem .8rem;
+      padding: .7rem .75rem;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background .15s, box-shadow .15s;
     }
-    .card:hover { box-shadow: var(--shadow-lg); }
+    .card:hover { background: rgba(28,28,40,.04); }
+    .card:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+    .card.selected { background: rgba(255,255,255,.85); box-shadow: var(--shadow); }
 
     .card-status { display: flex; align-items: center; }
     .dot {
-      width: 10px; height: 10px;
+      width: 8px; height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
     }
     .dot-green { background: var(--green); box-shadow: 0 0 0 3px var(--green-bg); }
     .dot-red   { background: var(--red);   box-shadow: 0 0 0 3px var(--red-bg); }
+    .dot-gray  { background: var(--faint); box-shadow: 0 0 0 3px rgba(139,136,147,.15); }
+    .card.paused .card-name, .card.paused .card-meta { opacity: .6; }
 
     .card-body { min-width: 0; }
     .card-name {
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: .25rem;
+      font-size: .98rem;
+      font-weight: 500;
+      margin-bottom: .15rem;
       display: flex;
       align-items: center;
-      gap: .5rem;
+      gap: .4rem;
       flex-wrap: wrap;
     }
     .card-meta {
       display: flex;
       align-items: center;
-      gap: 1rem;
-      font-size: .8rem;
+      gap: .4rem;
+      font-size: .78rem;
       color: var(--muted);
       flex-wrap: wrap;
     }
     .card-meta a { color: var(--primary); text-decoration: none; }
     .card-meta a:hover { text-decoration: underline; }
-    .card-meta .sep { color: var(--border); }
+    .card-meta .sep { color: var(--faint); }
+
+    /* Actions stay out of the way until a site is selected, hovered or focused */
+    .card-actions {
+      grid-column: 2;
+      display: none;
+      gap: .3rem;
+      align-items: center;
+      flex-wrap: wrap;
+      padding-top: .3rem;
+    }
+    .card.selected .card-actions,
+    .card:hover .card-actions,
+    .card:focus-within .card-actions { display: flex; }
 
     .badge {
       display: inline-flex;
       align-items: center;
       gap: .25rem;
       font-size: .7rem;
-      font-weight: 700;
-      letter-spacing: .03em;
-      padding: .15rem .45rem;
-      border-radius: 4px;
+      font-weight: 500;
+      padding: .12rem .5rem;
+      border-radius: 999px;
       white-space: nowrap;
     }
     .badge-green  { background: var(--green-bg); color: var(--green); }
     .badge-amber  { background: var(--amber-bg); color: var(--amber); }
     .badge-red    { background: var(--red-bg);   color: var(--red);   }
     .badge-gray   { background: var(--bg);       color: var(--muted); }
-    .badge-indigo { background: #ede9fe;          color: #5b21b6;      }
-
-    .card-actions { display: flex; gap: .5rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+    .badge-indigo { background: var(--blue-bg);  color: var(--primary-h); }
 
     .tunnel-url {
-      font-size: .75rem;
-      color: #5b21b6;
+      font-size: .78rem;
+      color: var(--primary-h);
       text-decoration: none;
-      font-weight: 600;
-      max-width: 220px;
+      font-weight: 500;
+      max-width: 240px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .tunnel-url:hover { text-decoration: underline; }
-    .btn-tunnel { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
-    .btn-tunnel:hover { background: #ddd6fe; }
+    .btn-tunnel { background: var(--blue-bg); color: var(--primary-h); }
+    .btn-tunnel:hover { background: rgba(74,116,224,.2); }
 
     .empty {
       text-align: center;
-      padding: 4rem 2rem;
+      padding: 2.5rem 1rem;
       color: var(--muted);
-      font-size: .95rem;
+      font-size: .9rem;
     }
-    .empty strong { display: block; font-size: 1.1rem; color: var(--text); margin-bottom: .5rem; }
+    .empty strong { display: block; font-size: 1rem; font-weight: 500; color: var(--text); margin-bottom: .35rem; }
 
     /* ── Modal ── */
     .overlay {
       position: fixed; inset: 0;
-      background: rgba(15,23,42,.4);
-      backdrop-filter: blur(2px);
+      background: rgba(40,36,48,.18);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       z-index: 100;
       display: none;
     }
@@ -187,10 +370,12 @@
       position: fixed;
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      background: var(--surface);
-      border-radius: 14px;
+      background: rgba(255,255,255,.94);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 24px;
       box-shadow: var(--shadow-lg);
-      width: min(520px, calc(100vw - 2rem));
+      width: min(540px, calc(100vw - 2rem));
       max-height: 90vh;
       overflow-y: auto;
       z-index: 101;
@@ -202,64 +387,64 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 1.25rem 1.5rem;
-      border-bottom: 1px solid var(--border);
+      padding: 1.4rem 1.6rem .6rem;
     }
-    .modal-header h2 { font-size: 1rem; font-weight: 700; }
+    .modal-header h2 { font-size: 1.25rem; font-weight: 500; letter-spacing: -.01em; }
     .modal-close {
       background: none; border: none; cursor: pointer;
       color: var(--muted); font-size: 1.4rem; line-height: 1;
-      padding: .2rem .4rem; border-radius: 4px;
+      width: 34px; height: 34px; border-radius: 50%;
     }
     .modal-close:hover { background: var(--bg); color: var(--text); }
 
-    .modal-body { padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+    .modal-body { padding: .9rem 1.6rem 1.4rem; display: flex; flex-direction: column; gap: 1rem; }
 
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
 
-    .field { display: flex; flex-direction: column; gap: .3rem; }
-    .field label { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .field { display: flex; flex-direction: column; gap: .35rem; }
+    .field label { font-size: .82rem; font-weight: 500; color: var(--muted); }
     .field input {
-      padding: .55rem .75rem;
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      font-size: .9rem;
+      padding: .65rem .9rem;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      font-size: .92rem;
       font-family: inherit;
       color: var(--text);
-      background: var(--surface);
-      transition: border-color .15s, box-shadow .15s;
+      background: var(--bg);
+      transition: background .15s, border-color .15s, box-shadow .15s;
       outline: none;
     }
     .field input:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+      background: #fff;
+      border-color: rgba(74,116,224,.45);
+      box-shadow: 0 0 0 4px rgba(74,116,224,.12);
     }
-    .field input::placeholder { color: #94a3b8; }
+    .field input::placeholder { color: var(--faint); }
 
     /* Toggle switch */
     .toggle-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: .75rem 1rem;
+      gap: 1rem;
+      padding: .85rem 1rem;
       background: var(--bg);
-      border-radius: 8px;
-      border: 1px solid var(--border);
+      border-radius: 14px;
     }
-    .toggle-row label { font-size: .875rem; font-weight: 600; cursor: pointer; }
-    .toggle-row small { display: block; font-size: .75rem; color: var(--muted); font-weight: 400; }
+    .toggle-row label { font-size: .9rem; font-weight: 500; cursor: pointer; }
+    .toggle-row small { display: block; font-size: .76rem; color: var(--muted); font-weight: 400; margin-top: .1rem; }
 
     .toggle {
       position: relative;
-      width: 40px; height: 22px;
+      width: 42px; height: 24px;
       flex-shrink: 0;
     }
     .toggle input { opacity: 0; width: 0; height: 0; }
     .toggle-track {
       position: absolute; inset: 0;
-      background: #cbd5e1;
-      border-radius: 22px;
+      background: #d6d3d9;
+      border-radius: 24px;
       cursor: pointer;
       transition: background .2s;
     }
@@ -267,14 +452,23 @@
       content: '';
       position: absolute;
       left: 3px; top: 3px;
-      width: 16px; height: 16px;
+      width: 18px; height: 18px;
       border-radius: 50%;
       background: #fff;
-      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+      box-shadow: 0 1px 3px rgba(0,0,0,.18);
       transition: transform .2s;
     }
     .toggle input:checked + .toggle-track { background: var(--primary); }
     .toggle input:checked + .toggle-track::after { transform: translateX(18px); }
+    .toggle input:focus-visible + .toggle-track { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+    /* Grouped settings (Tunnel Config): white fields on a soft panel */
+    .panel {
+      display: flex; flex-direction: column; gap: .85rem;
+      padding: 1rem; background: var(--bg); border-radius: 16px;
+    }
+    .panel .field input, .panel .toggle-row { background: #fff; }
+    .panel .field input:focus { background: #fff; }
 
     .auth-fields {
       display: flex; flex-direction: column; gap: 1rem;
@@ -289,35 +483,33 @@
     /* Protected URL rules */
     .section-head {
       display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-      padding: .75rem 1rem; background: var(--bg);
-      border: 1px solid var(--border); border-radius: 8px;
+      padding: .85rem 1rem; background: var(--bg); border-radius: 14px;
     }
-    .section-head strong { font-size: .875rem; }
-    .section-head small { display: block; font-size: .75rem; color: var(--muted); }
+    .section-head strong { font-size: .9rem; font-weight: 500; }
+    .section-head small { display: block; font-size: .76rem; color: var(--muted); }
     .section-head .btn { white-space: nowrap; flex-shrink: 0; }
     #path-rules { display: flex; flex-direction: column; gap: .75rem; }
     .path-rule {
-      display: flex; flex-direction: column; gap: .6rem;
-      padding: .85rem; border: 1px solid var(--border); border-radius: 8px;
+      display: flex; flex-direction: column; gap: .7rem;
+      padding: 1rem; border: 1px solid var(--border); border-radius: 16px;
     }
     .path-rule-top { display: flex; gap: .5rem; align-items: flex-end; }
     .path-rule-top .field { flex: 1; }
-    .path-hint { font-size: .75rem; color: var(--muted); }
+    .path-hint { font-size: .76rem; color: var(--muted); }
 
     .modal-footer {
       display: flex;
       justify-content: flex-end;
-      gap: .75rem;
-      padding: 1rem 1.5rem;
-      border-top: 1px solid var(--border);
+      gap: .6rem;
+      padding: .4rem 1.6rem 1.5rem;
     }
 
     .error-banner {
       background: var(--red-bg);
       color: var(--red);
-      border-radius: 7px;
-      padding: .65rem .9rem;
-      font-size: .85rem;
+      border-radius: 12px;
+      padding: .7rem 1rem;
+      font-size: .86rem;
       font-weight: 500;
     }
 
@@ -330,48 +522,87 @@
       pointer-events: none;
     }
     .toast {
-      background: var(--text);
+      background: var(--ink);
       color: #fff;
-      padding: .65rem 1rem;
-      border-radius: 8px;
-      font-size: .85rem;
+      padding: .7rem 1.1rem;
+      border-radius: 999px;
+      font-size: .86rem;
       font-weight: 500;
       box-shadow: var(--shadow-lg);
       animation: toastIn .2s ease, toastOut .3s ease 2.7s forwards;
-      max-width: 300px;
+      max-width: 340px;
     }
     .toast-error { background: var(--red); }
     @keyframes toastIn  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
     @keyframes toastOut { from { opacity:1; } to { opacity:0; } }
-  </style>
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+</style>
 </head>
 <body>
 
-<header>
-  <div class="header-brand">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+<div class="app">
+ <aside class="sidebar" aria-label="Sites">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="2" y="3" width="20" height="14" rx="3"/><path d="M8 21h8M12 17v4"/>
     </svg>
-    <h1>Site Manager <span>— Multi-Port Web Server</span></h1>
+    <h1 style="font-size:inherit;font-weight:inherit">Site Manager</h1>
   </div>
-</header>
 
-<main>
-  <div class="toolbar">
-    <h2><span id="site-count">0</span> sites configured</h2>
-    <div style="display:flex;gap:.5rem;align-items:center;">
-      <button class="btn btn-ghost" onclick="openTunnelConfig()" id="btn-tunnel-cfg" title="Configure tunnel server settings">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-        Tunnel Config <span id="tunnel-cfg-status" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:#cbd5e1;margin-left:4px;vertical-align:middle;"></span>
-      </button>
-      <button class="btn btn-primary" onclick="openModal()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-        Add Site
-      </button>
-    </div>
+  <nav class="nav" aria-label="Actions">
+    <button class="nav-item" onclick="openModal()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      Add Site
+    </button>
+    <button class="nav-item" onclick="openTunnelConfig()" id="btn-tunnel-cfg" title="Configure tunnel server settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+      Tunnel Config
+      <span id="tunnel-cfg-status" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:#cbd5e1;margin-left:4px;vertical-align:middle;"></span>
+    </button>
+  </nav>
+
+  <h2 class="section-label">Sites <span id="site-count">0</span></h2>
+  <div class="site-list"><div id="grid"></div></div>
+  <div class="sidebar-foot">Multi-Port Web Server</div>
+ </aside>
+
+ <main class="workspace">
+  <div class="topbar">
+    <span class="lab-mark">Bughao Lab</span>
   </div>
-  <div id="grid"></div>
-</main>
+
+  <section class="preview" aria-label="Site preview">
+   <div class="preview-bar">
+    <div class="preview-title">
+      <span class="dot" id="pv-dot"></span>
+      <strong id="pv-name">No site selected</strong>
+      <span class="badge badge-amber hidden" id="pv-lock"
+        title="Your browser asks for this site's login inside the preview. If no prompt appears, use Open ↗, log in there, then Reload.">🔒 login</span>
+    </div>
+    <div class="preview-address">
+      <a id="pv-url" target="_blank" rel="noopener"></a>
+      <a id="pv-tunnel" class="tunnel-url hidden" target="_blank" rel="noopener"></a>
+    </div>
+    <div class="preview-actions">
+      <button class="btn btn-ghost btn-sm" id="pv-reload" onclick="renderPreview(true)" title="Reload the preview">↻ Reload</button>
+      <a class="btn btn-ghost btn-sm" id="pv-open" target="_blank" rel="noopener" title="Open in a new tab">Open ↗</a>
+    </div>
+   </div>
+   <div class="preview-frame">
+    <!-- Sandboxed: the previewed site can run normally but can't navigate or script this page -->
+    <iframe id="pv-frame" title="Site preview"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe>
+    <div class="preview-empty" id="pv-empty">
+      <strong>Select a site</strong>
+      <span>Click a site on the left to preview it here.</span>
+    </div>
+   </div>
+  </section>
+ </main>
+</div>
 
 <!-- Modal overlay -->
 <div class="overlay" id="overlay" onclick="closeModal()"></div>
@@ -466,7 +697,7 @@
     <div id="tunnel-cfg-error" class="error-banner hidden"></div>
 
     <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.25rem;">Server <span style="font-weight:400;text-transform:none">(runs on your VPS)</span></div>
-    <div style="display:flex;flex-direction:column;gap:.85rem;padding:1rem;background:var(--bg);border-radius:8px;border:1px solid var(--border);">
+    <div class="panel">
       <div class="form-row">
         <div class="field">
           <label for="tc-domain">Domain</label>
@@ -496,7 +727,7 @@
     </div>
 
     <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:.85rem 0 .25rem;">Client <span style="font-weight:400;text-transform:none">(auto-filled from above)</span></div>
-    <div style="display:flex;flex-direction:column;gap:.85rem;padding:1rem;background:var(--bg);border-radius:8px;border:1px solid var(--border);">
+    <div class="panel">
       <div class="form-row">
         <div class="field">
           <label for="tc-client-host">Server Host</label>
@@ -580,21 +811,108 @@
 
   function renderSites() {
     document.getElementById('site-count').textContent = sites.length;
+    if (!sites.some(s => s.port === selectedPort)) selectedPort = sites.length ? sites[0].port : null;
 
     if (sites.length === 0) {
       showGrid(`<div class="empty">
         <strong>No sites yet</strong>
         Click <em>Add Site</em> to configure your first site.
       </div>`);
+    } else {
+      showGrid(sites.map(renderCard).join(''));
+    }
+    renderPreview();
+  }
+
+  // Same host the manager is viewed on, so the preview works however you reached the manager
+  function siteUrl(port) {
+    return `${location.protocol}//${location.hostname}:${port}/`;
+  }
+
+  // ── Selection & preview ───────────────────────────────────────────────────
+
+  let selectedPort = (() => {
+    try { return Number(localStorage.getItem('roweb.selectedPort')) || null; } catch { return null; }
+  })();
+
+  function selectSite(port) {
+    if (port === selectedPort) return;
+    selectedPort = port;
+    try { localStorage.setItem('roweb.selectedPort', String(port)); } catch {}
+    document.querySelectorAll('#grid .card').forEach(c => {
+      const on = Number(c.dataset.port) === port;
+      c.classList.toggle('selected', on);
+      c.setAttribute('aria-pressed', String(on));
+    });
+    renderPreview();
+    // Stacked (phone) layout: the preview is below the list, so bring it into view
+    if (matchMedia('(max-width: 860px)').matches) {
+      document.querySelector('.preview').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function normalizePath(p) {
+    return ('/' + String(p || '').trim().replace(/^\/+/, '')).replace(/\/+$/, '') || '/';
+  }
+
+  function cardKey(e, port) {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectSite(port); }
+  }
+
+  // Only (re)loads the iframe when the selected site changes or `force` is set,
+  // so list refreshes don't interrupt what you're looking at.
+  function renderPreview(force = false) {
+    const site  = sites.find(s => s.port === selectedPort);
+    const frame = document.getElementById('pv-frame');
+    const empty = document.getElementById('pv-empty');
+    const url   = site ? siteUrl(site.port) : '';
+
+    document.getElementById('pv-name').textContent = site ? site.name : 'No site selected';
+    document.getElementById('pv-dot').className = 'dot ' + (!site ? '' : site.paused ? 'dot-gray' : site.running ? 'dot-green' : 'dot-red');
+    const link = document.getElementById('pv-url');
+    link.textContent = url;
+    link.href = url || '#';
+    const open = document.getElementById('pv-open');
+    open.href = url || '#';
+    open.classList.toggle('hidden', !site || !site.running);
+    document.getElementById('pv-reload').classList.toggle('hidden', !site || !site.running);
+    document.getElementById('pv-lock').classList.toggle('hidden', !(site && (site.auth || (site.protectedPaths || []).some(r => normalizePath(r.path) === '/'))));
+
+    const tunnel = document.getElementById('pv-tunnel');
+    tunnel.classList.toggle('hidden', !(site && site.tunnelUrl));
+    if (site && site.tunnelUrl) {
+      tunnel.href = site.tunnelUrl;
+      tunnel.textContent = '🔗 ' + site.tunnelUrl;
+      tunnel.title = 'Public tunnel URL';
+    }
+
+    if (!site || !site.running) {
+      empty.innerHTML = !site
+        ? '<strong>Select a site</strong><span>Click a site on the left to preview it here.</span>'
+        : site.paused
+          ? `<strong>This site is paused</strong><span>It isn't being served to anyone right now.</span>
+             <button class="btn btn-primary" style="margin-top:.75rem" onclick="setPaused(${site.port}, false, this)">▶ Resume site</button>`
+          : '<strong>This site is stopped</strong><span>Its port may be in use by another program. Edit the site to choose another port.</span>';
+      empty.classList.remove('hidden');
+      frame.classList.add('hidden');
+      if (frame.dataset.src) { frame.src = 'about:blank'; frame.dataset.src = ''; }
       return;
     }
 
-    showGrid(sites.map(renderCard).join(''));
+    empty.classList.add('hidden');
+    frame.classList.remove('hidden');
+    frame.title = `Preview of ${site.name}`;
+    if (force || frame.dataset.src !== url) {
+      frame.dataset.src = url;
+      frame.src = url;
+    }
   }
 
   function renderCard(site) {
     const running   = site.running;
-    const url       = `http://localhost:${site.port}`;
+    const url       = siteUrl(site.port);
+    const selected  = site.port === selectedPort;
     const authLabel = site.auth
       ? `<span class="badge badge-amber">🔒 auth</span>`
       : `<span class="badge badge-green">🌐 open</span>`;
@@ -602,20 +920,30 @@
     const pathBadge = rules.length
       ? `<span class="badge badge-amber" title="${escHtml(rules.map(r => r.path).join(', '))}">🔑 ${rules.length} protected URL${rules.length > 1 ? 's' : ''}</span>`
       : '';
-    const runBadge  = running
-      ? `<span class="badge badge-green">running</span>`
-      : `<span class="badge badge-red">stopped</span>`;
+    const paused    = !!site.paused;
+    const runBadge  = paused
+      ? `<span class="badge badge-gray">⏸ paused</span>`
+      : running
+        ? `<span class="badge badge-green">running</span>`
+        : `<span class="badge badge-red">stopped</span>`;
+    const [dotClass, dotTitle] = paused ? ['dot-gray', 'Paused'] : running ? ['dot-green', 'Running'] : ['dot-red', 'Stopped'];
 
     const indexFile = site.index || 'index.html';
 
-    const tunnelSection = site.tunnelUrl
-      ? `<a href="${escHtml(site.tunnelUrl)}" target="_blank" rel="noopener" class="tunnel-url" title="${escHtml(site.tunnelUrl)}">🔗 ${escHtml(site.tunnelUrl)}</a>
-         <button class="btn btn-danger btn-sm" onclick="stopTunnel(${site.port})">Stop Tunnel</button>`
-      : `<button class="btn btn-tunnel btn-sm" onclick="startTunnel(${site.port}, this)">🔗 Tunnel</button>`;
+    // Buttons stop propagation so they don't also select the card
+    const tunnelSection = paused ? '' : site.tunnelUrl
+      ? `<span class="badge badge-indigo" title="${escHtml(site.tunnelUrl)}">🔗 tunnel on</span>
+         <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); stopTunnel(${site.port})">Stop Tunnel</button>`
+      : `<button class="btn btn-tunnel btn-sm" onclick="event.stopPropagation(); startTunnel(${site.port}, this)">🔗 Tunnel</button>`;
+    const pauseButton = paused
+      ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); setPaused(${site.port}, false, this)" title="Start serving this site again">▶ Resume</button>`
+      : `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); setPaused(${site.port}, true, this)" title="Stop serving this site until you resume it">⏸ Pause</button>`;
 
-    return `<div class="card">
+    return `<div class="card${selected ? ' selected' : ''}${paused ? ' paused' : ''}" data-port="${site.port}" tabindex="0" role="button"
+        aria-pressed="${selected}" aria-label="Preview ${escHtml(site.name)}${paused ? ' (paused)' : ''}"
+        onclick="selectSite(${site.port})" onkeydown="cardKey(event, ${site.port})">
       <div class="card-status">
-        <div class="dot ${running ? 'dot-green' : 'dot-red'}" title="${running ? 'Running' : 'Stopped'}"></div>
+        <div class="dot ${dotClass}" title="${dotTitle}"></div>
       </div>
       <div class="card-body">
         <div class="card-name">
@@ -625,19 +953,18 @@
           ${runBadge}
         </div>
         <div class="card-meta">
-          <a href="${url}" target="_blank" rel="noopener">:${site.port}</a>
+          <a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">:${site.port}</a>
           <span class="sep">·</span>
           <span title="Root directory">${escHtml(site.root)}</span>
           <span class="sep">·</span>
           <span title="Index file">${escHtml(indexFile)}</span>
-          ${site.auth ? `<span class="sep">·</span><span title="Auth realm">${escHtml(site.auth.realm || site.name)}</span>` : ''}
-          ${rules.length ? `<span class="sep">·</span><span title="Protected URLs">${rules.map(r => escHtml(r.path)).join(', ')}</span>` : ''}
         </div>
       </div>
       <div class="card-actions">
         ${tunnelSection}
-        <button class="btn btn-ghost btn-sm" onclick="openEditModal(${site.port})">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmDelete(${site.port})">Delete</button>
+        ${pauseButton}
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); openEditModal(${site.port})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); confirmDelete(${site.port})">Delete</button>
       </div>
     </div>`;
   }
@@ -792,7 +1119,14 @@
       }
 
       sites = data.sites;
+      // Follow the site you just added or edited; reload so new content/login settings show
+      const wasSelected = editingPort === null || editingPort === selectedPort;
+      if (wasSelected) {
+        selectedPort = site.port;
+        try { localStorage.setItem('roweb.selectedPort', String(site.port)); } catch {}
+      }
       renderSites();
+      if (wasSelected) renderPreview(true);
       closeModal();
       toast(editingPort ? 'Site updated successfully.' : 'Site added and started.');
     } catch (err) {
@@ -865,6 +1199,28 @@
       toast('Network error: ' + err.message, 'error');
       btn.disabled = false;
       btn.textContent = '🔗 Tunnel';
+    }
+  }
+
+  // ── Pause / resume ──────────────────────────────────────────────────────
+
+  async function setPaused(port, pause, btn) {
+    const site = sites.find(s => s.port === port);
+    if (btn) { btn.disabled = true; btn.textContent = pause ? 'Pausing…' : 'Resuming…'; }
+    try {
+      const data = await api(`/api/sites/${port}/${pause ? 'pause' : 'resume'}`, { method: 'POST' });
+      if (!data.ok) {
+        toast(data.error, 'error');
+        renderSites();
+        return;
+      }
+      sites = data.sites;
+      renderSites();
+      if (!pause && port === selectedPort) renderPreview(true);
+      toast(`"${site ? site.name : 'Site'}" ${pause ? 'paused — it is no longer being served.' : 'resumed.'}`);
+    } catch (err) {
+      toast('Network error: ' + err.message, 'error');
+      renderSites();
     }
   }
 
