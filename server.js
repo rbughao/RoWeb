@@ -4,10 +4,11 @@ const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 
-const { checkAuth }                     = require('./lib/auth');
-const { serveFile }                     = require('./lib/fileServer');
+const { checkAuth, pickAuth }           = require('./lib/auth');
+const { resolveFilePath, canonicalRelPath, serveFile, sendStatus } = require('./lib/fileServer');
 const { printStartupTable, logRequest } = require('./lib/logger');
 const { createManagerServer }           = require('./lib/manager');
+const { setSiteHeaders }                = require('./lib/securityHeaders');
 
 const configPath = path.join(__dirname, 'config.json');
 
@@ -33,18 +34,24 @@ for (const site of config.sites) {
     console.error(`Site "${site.name}" has auth configured but is missing user or pass.`);
     process.exit(1);
   }
+  for (const rule of site.protectedPaths || []) {
+    if (!rule.path || !rule.user || !rule.pass) {
+      console.error(`Site "${site.name}" has a protected URL missing path, user, or pass.`);
+      process.exit(1);
+    }
+  }
+}
+
+if (config.manager && config.manager.auth && config.manager.auth.pass === 'manager123') {
+  console.warn('WARNING: the Site Manager is using the default password — change manager.auth.pass in config.json.');
 }
 
 function createSiteHandler(site) {
-  const resolvedRoot = path.resolve(__dirname, site.root);
-  const resolvedSite = { ...site, root: resolvedRoot };
+  const resolvedSite = { ...site, root: path.resolve(__dirname, site.root) };
 
-  return (req, res) => {
-    const authed = checkAuth(req, res, site.auth);
-    if (!authed) {
-      logRequest(site.name, req, 401);
-      return;
-    }
+  return async (req, res) => {
+    setSiteHeaders(res);
+
     const origWriteHead = res.writeHead.bind(res);
     let statusCode = 200;
     res.writeHead = (code, ...args) => {
@@ -57,8 +64,27 @@ function createSiteHandler(site) {
       res.end = origEnd;
       return origEnd(...args);
     };
-    serveFile(req, res, resolvedSite);
+
+    try {
+      const target = resolveFilePath(req.url, resolvedSite);
+      if (target.status) return sendStatus(res, target.status);
+
+      const relPath = await canonicalRelPath(target);
+      if (!checkAuth(req, res, pickAuth(site, relPath))) return;
+
+      serveFile(res, target);
+    } catch (err) {
+      console.error(`[${site.name}] ${err.message}`);
+      if (!res.headersSent) sendStatus(res, 500);
+    }
   };
+}
+
+function publicSiteView({ auth, protectedPaths, ...site }) {
+  const view = { ...site };
+  if (auth) view.auth = { user: auth.user, realm: auth.realm };
+  if (protectedPaths) view.protectedPaths = protectedPaths.map(({ pass, ...rule }) => rule);
+  return view;
 }
 
 const siteManager = {
@@ -70,6 +96,8 @@ const siteManager = {
   startSite(site) {
     return new Promise((resolve, reject) => {
       const server = http.createServer(createSiteHandler(site));
+      server.requestTimeout = 30_000;
+      server.headersTimeout = 10_000;
       server.once('listening', () => {
         this.servers.set(site.port, server);
         resolve(server);
@@ -127,9 +155,10 @@ const siteManager = {
     fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2), 'utf8');
   },
 
+  // Passwords are never sent to the browser
   getSites() {
     return this.config.sites.map(site => ({
-      ...site,
+      ...publicSiteView(site),
       running:   this.servers.has(site.port),
       tunnelUrl: this.activeTunnels.has(site.port)
         ? this.activeTunnels.get(site.port).publicUrl

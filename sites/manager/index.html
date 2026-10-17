@@ -286,6 +286,24 @@
     }
     .hidden { display: none !important; }
 
+    /* Protected URL rules */
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: .75rem 1rem; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    .section-head strong { font-size: .875rem; }
+    .section-head small { display: block; font-size: .75rem; color: var(--muted); }
+    .section-head .btn { white-space: nowrap; flex-shrink: 0; }
+    #path-rules { display: flex; flex-direction: column; gap: .75rem; }
+    .path-rule {
+      display: flex; flex-direction: column; gap: .6rem;
+      padding: .85rem; border: 1px solid var(--border); border-radius: 8px;
+    }
+    .path-rule-top { display: flex; gap: .5rem; align-items: flex-end; }
+    .path-rule-top .field { flex: 1; }
+    .path-hint { font-size: .75rem; color: var(--muted); }
+
     .modal-footer {
       display: flex;
       justify-content: flex-end;
@@ -411,7 +429,7 @@
           </div>
           <div class="field">
             <label for="f-pass">Password</label>
-            <input id="f-pass" name="pass" type="text" placeholder="secret" autocomplete="off">
+            <input id="f-pass" name="pass" type="password" placeholder="secret" autocomplete="new-password">
           </div>
         </div>
         <div class="field">
@@ -419,6 +437,16 @@
           <input id="f-realm" name="realm" type="text" placeholder="Protected Area">
         </div>
       </div>
+
+      <!-- Per-URL logins -->
+      <div class="section-head">
+        <div>
+          <strong>Protected URLs</strong>
+          <small>Ask for a browser login only on specific paths, e.g. <code>/reports</code> or <code>/admin/settings.html</code></small>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="addPathRow()">+ Add URL</button>
+      </div>
+      <div id="path-rules"></div>
     </div>
 
     <div class="modal-footer">
@@ -492,6 +520,16 @@
           <label for="tc-tls" class="toggle-track"></label>
         </div>
       </div>
+      <div class="toggle-row">
+        <label for="tc-insecure">
+          Allow self-signed certificate
+          <small>Skips certificate verification — development only, never in production</small>
+        </label>
+        <div class="toggle">
+          <input type="checkbox" id="tc-insecure">
+          <label for="tc-insecure" class="toggle-track"></label>
+        </div>
+      </div>
     </div>
   </div>
   <div class="modal-footer">
@@ -508,21 +546,27 @@
   let editingPort = null; // null = add mode, number = edit mode
   let managerPort = location.port;
 
+  // The server rejects state-changing API calls without this header (CSRF protection)
+  async function api(url, { method = 'GET', body } = {}) {
+    const headers = { 'X-Requested-With': 'RoWeb' };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    return res.json();
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────────
 
   async function init() {
     await refresh();
     // Load tunnel config status dot without opening the modal
-    fetch('/api/tunnel/config')
-      .then(r => r.json())
+    api('/api/tunnel/config')
       .then(d => { if (d.ok) updateTunnelCfgStatus(d.config); })
       .catch(() => {});
   }
 
   async function refresh() {
     try {
-      const res = await fetch('/api/sites');
-      const data = await res.json();
+      const data = await api('/api/sites');
       if (!data.ok) throw new Error(data.error);
       sites = data.sites;
       managerPort = String(data.managerPort || managerPort);
@@ -554,6 +598,10 @@
     const authLabel = site.auth
       ? `<span class="badge badge-amber">🔒 auth</span>`
       : `<span class="badge badge-green">🌐 open</span>`;
+    const rules     = site.protectedPaths || [];
+    const pathBadge = rules.length
+      ? `<span class="badge badge-amber" title="${escHtml(rules.map(r => r.path).join(', '))}">🔑 ${rules.length} protected URL${rules.length > 1 ? 's' : ''}</span>`
+      : '';
     const runBadge  = running
       ? `<span class="badge badge-green">running</span>`
       : `<span class="badge badge-red">stopped</span>`;
@@ -573,6 +621,7 @@
         <div class="card-name">
           ${escHtml(site.name)}
           ${authLabel}
+          ${pathBadge}
           ${runBadge}
         </div>
         <div class="card-meta">
@@ -582,12 +631,13 @@
           <span class="sep">·</span>
           <span title="Index file">${escHtml(indexFile)}</span>
           ${site.auth ? `<span class="sep">·</span><span title="Auth realm">${escHtml(site.auth.realm || site.name)}</span>` : ''}
+          ${rules.length ? `<span class="sep">·</span><span title="Protected URLs">${rules.map(r => escHtml(r.path)).join(', ')}</span>` : ''}
         </div>
       </div>
       <div class="card-actions">
         ${tunnelSection}
         <button class="btn btn-ghost btn-sm" onclick="openEditModal(${site.port})">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmDelete(${site.port}, ${JSON.stringify(escHtml(site.name))})">Delete</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDelete(${site.port})">Delete</button>
       </div>
     </div>`;
   }
@@ -603,6 +653,8 @@
     document.getElementById('modal-title').textContent = 'Add Site';
     document.getElementById('submit-btn').textContent = 'Add Site';
     document.getElementById('site-form').reset();
+    document.getElementById('f-pass').placeholder = 'secret';
+    document.getElementById('path-rules').innerHTML = '';
     hideAuthFields();
     hideError();
     showModal();
@@ -624,14 +676,22 @@
 
     const hasAuth = !!site.auth;
     document.getElementById('f-auth-toggle').checked = hasAuth;
+    const passInput = document.getElementById('f-pass');
+    passInput.value = '';
     if (hasAuth) {
       showAuthFields();
       document.getElementById('f-user').value  = site.auth.user || '';
-      document.getElementById('f-pass').value  = site.auth.pass || '';
       document.getElementById('f-realm').value = site.auth.realm || '';
+      passInput.placeholder = 'Leave blank to keep current';
     } else {
+      document.getElementById('f-user').value  = '';
+      document.getElementById('f-realm').value = '';
+      passInput.placeholder = 'secret';
       hideAuthFields();
     }
+
+    document.getElementById('path-rules').innerHTML = '';
+    (site.protectedPaths || []).forEach(rule => addPathRow(rule, true));
 
     showModal();
     document.getElementById('f-name').focus();
@@ -656,6 +716,59 @@
   function showAuthFields() { document.getElementById('auth-fields').classList.remove('hidden'); }
   function hideAuthFields() { document.getElementById('auth-fields').classList.add('hidden'); }
 
+  // ── Protected URL rows ────────────────────────────────────────────────────
+
+  function addPathRow(rule = {}, existing = false) {
+    const row = document.createElement('div');
+    row.className = 'path-rule';
+    row.innerHTML = `
+      <div class="path-rule-top">
+        <div class="field">
+          <label>URL path</label>
+          <input data-k="path" type="text" placeholder="/reports" autocomplete="off">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" title="Remove">Remove</button>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Username</label>
+          <input data-k="user" type="text" placeholder="viewer" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input data-k="pass" type="password" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="field">
+        <label>Realm <span style="font-weight:400;text-transform:none">(optional)</span></label>
+        <input data-k="realm" type="text" placeholder="Reports" autocomplete="off">
+      </div>
+      <div class="path-hint">Covers this path and everything under it. Overrides the site-wide login for these URLs.</div>`;
+
+    // Values are assigned via .value, never interpolated into HTML
+    row.querySelector('[data-k="path"]').value  = rule.path  || '';
+    row.querySelector('[data-k="user"]').value  = rule.user  || '';
+    row.querySelector('[data-k="realm"]').value = rule.realm || '';
+    row.querySelector('[data-k="pass"]').placeholder = existing ? 'Leave blank to keep current' : 'secret';
+    row.querySelector('.btn-danger').onclick = () => row.remove();
+
+    document.getElementById('path-rules').appendChild(row);
+    if (!existing) row.querySelector('[data-k="path"]').focus();
+  }
+
+  function readPathRows() {
+    const rules = [];
+    document.querySelectorAll('#path-rules .path-rule').forEach(row => {
+      const get = k => row.querySelector(`[data-k="${k}"]`).value.trim();
+      const rule = { path: get('path'), user: get('user'), pass: get('pass') };
+      if (!rule.path && !rule.user && !rule.pass && !get('realm')) return;
+      if (rule.path && !rule.path.startsWith('/')) rule.path = '/' + rule.path;
+      if (get('realm')) rule.realm = get('realm');
+      rules.push(rule);
+    });
+    return rules;
+  }
+
   // ── Form submit ───────────────────────────────────────────────────────────
 
   async function handleSubmit(e) {
@@ -669,13 +782,9 @@
     const site = buildSiteFromForm();
 
     try {
-      let res, data;
-      if (editingPort === null) {
-        res  = await fetch('/api/sites', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(site) });
-      } else {
-        res  = await fetch(`/api/sites/${editingPort}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(site) });
-      }
-      data = await res.json();
+      const data = editingPort === null
+        ? await api('/api/sites', { method: 'POST', body: site })
+        : await api(`/api/sites/${editingPort}`, { method: 'PUT', body: site });
 
       if (!data.ok) {
         showError(data.error);
@@ -712,17 +821,21 @@
       if (realm) site.auth.realm = realm;
     }
 
+    const rules = readPathRows();
+    if (rules.length) site.protectedPaths = rules;
+
     return site;
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────
 
-  async function confirmDelete(port, name) {
+  async function confirmDelete(port) {
+    const site = sites.find(s => s.port === port);
+    const name = site ? site.name : `port ${port}`;
     if (!confirm(`Delete "${name}" (port ${port})?\n\nThis will stop the server and remove it from config.`)) return;
 
     try {
-      const res  = await fetch(`/api/sites/${port}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await api(`/api/sites/${port}`, { method: 'DELETE' });
       if (!data.ok) return toast(data.error, 'error');
       sites = data.sites;
       renderSites();
@@ -738,8 +851,7 @@
     btn.disabled = true;
     btn.textContent = 'Connecting…';
     try {
-      const res  = await fetch(`/api/tunnel/${port}`, { method: 'POST' });
-      const data = await res.json();
+      const data = await api(`/api/tunnel/${port}`, { method: 'POST' });
       if (!data.ok) {
         toast(data.error, 'error');
         btn.disabled = false;
@@ -758,8 +870,7 @@
 
   async function stopTunnel(port) {
     try {
-      const res  = await fetch(`/api/tunnel/${port}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await api(`/api/tunnel/${port}`, { method: 'DELETE' });
       if (!data.ok) return toast(data.error, 'error');
       sites = data.sites;
       renderSites();
@@ -777,9 +888,8 @@
   async function openTunnelConfig() {
     hideTunnelCfgError();
     try {
-      const res  = await fetch('/api/tunnel/config');
-      const data = await res.json();
-      const s = (data.config && data.config.server) || {};
+      const data = await api('/api/tunnel/config');
+      const s =(data.config && data.config.server) || {};
       const c = (data.config && data.config.client) || {};
 
       document.getElementById('tc-domain').value       = s.domain      || '';
@@ -790,6 +900,7 @@
       document.getElementById('tc-client-host').value  = c.serverHost  || s.domain || '';
       document.getElementById('tc-client-port').value  = c.controlPort || s.controlPort || 7000;
       document.getElementById('tc-tls').checked        = !!c.tls;
+      document.getElementById('tc-insecure').checked   = !!c.insecure;
 
       updateTunnelCfgStatus(data.config);
     } catch (e) {
@@ -857,6 +968,7 @@
         controlPort: parseInt(document.getElementById('tc-client-port').value || '7000', 10),
         token,
         tls:         document.getElementById('tc-tls').checked,
+        insecure:    document.getElementById('tc-insecure').checked,
       },
     };
 
@@ -865,12 +977,7 @@
     saveBtn.textContent = 'Saving…';
 
     try {
-      const res  = await fetch('/api/tunnel/config', {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(cfg),
-      });
-      const data = await res.json();
+      const data = await api('/api/tunnel/config', { method: 'PUT', body: cfg });
       if (!data.ok) {
         showTunnelCfgError(data.error);
         return;

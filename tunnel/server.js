@@ -32,15 +32,16 @@ try {
 
 const srv = config.server || {};
 const {
-  domain,
   controlPort  = 7000,
   token,
   certFile,
   keyFile,
   requestTimeout = 30000,
+  maxBodyBytes   = 10 * 1024 * 1024,
 } = srv;
+const domain = String(srv.domain || '').toLowerCase();
 
-if (!domain)  { console.error('tunnel-config.json: server.domain is required');  process.exit(1); }
+if (!domain) { console.error('tunnel-config.json: server.domain is required');  process.exit(1); }
 if (!token)   { console.error('tunnel-config.json: server.token is required');   process.exit(1); }
 if (!certFile){ console.error('tunnel-config.json: server.certFile is required'); process.exit(1); }
 if (!keyFile) { console.error('tunnel-config.json: server.keyFile is required');  process.exit(1); }
@@ -52,6 +53,16 @@ try {
 } catch (err) {
   console.error(`Failed to read TLS cert/key: ${err.message}`);
   process.exit(1);
+}
+
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ── Tunnel registry ───────────────────────────────────────────────────────────
@@ -89,7 +100,7 @@ controlServer.on('upgrade', (req, socket, head) => {
     socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
     return socket.destroy();
   }
-  if (req.headers['x-token'] !== token) {
+  if (!safeEqual(req.headers['x-token'] || '', token)) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     return socket.destroy();
   }
@@ -185,14 +196,29 @@ const publicServer = https.createServer({ cert, key }, (req, res) => {
     return res.end(
       `<!DOCTYPE html><html><head><title>No Tunnel</title></head><body>
        <h2>502 — No active tunnel</h2>
-       <p>The tunnel for <code>${subdomain}</code> is not connected.</p>
+       <p>The tunnel for <code>${escapeHtml(subdomain)}</code> is not connected.</p>
        </body></html>`
     );
   }
 
+  const tooLarge = () => {
+    res.writeHead(413, { 'Content-Type': 'text/plain', Connection: 'close' });
+    res.end('413 Payload Too Large', () => req.socket.destroy());
+  };
+
+  if (parseInt(req.headers['content-length'] || '0', 10) > maxBodyBytes) return tooLarge();
+
   const chunks = [];
-  req.on('data', chunk => chunks.push(chunk));
+  let size = 0;
+  let aborted = false;
+  req.on('data', chunk => {
+    if (aborted) return;
+    size += chunk.length;
+    if (size > maxBodyBytes) { aborted = true; return tooLarge(); }
+    chunks.push(chunk);
+  });
   req.on('end', () => {
+    if (aborted) return;
     const body      = Buffer.concat(chunks).toString('base64');
     const requestId = newReqId();
 
@@ -207,7 +233,13 @@ const publicServer = https.createServer({ cert, key }, (req, res) => {
     tunnel.socket.write(encode(TYPES.HTTP_REQ, requestId, {
       method:  req.method,
       path:    req.url,
-      headers: req.headers,
+      // Overwrite (never append) so clients can't spoof their IP to dodge rate limiting
+      headers: {
+        ...req.headers,
+        'x-forwarded-for':   req.socket.remoteAddress || '',
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host':  host,
+      },
       body,
     }));
 
@@ -236,14 +268,25 @@ const publicServer = https.createServer({ cert, key }, (req, res) => {
   });
 });
 
+publicServer.requestTimeout = requestTimeout + 10_000;
+publicServer.headersTimeout = 10_000;
+
 publicServer.listen(443, () => {
   console.log(`Public HTTPS    :443  (*.${domain})`);
 });
 
 // ── HTTP → HTTPS redirect ─────────────────────────────────────────────────────
 
+// Only redirect to our own domain; an attacker-supplied Host header falls back to the bare domain
+function redirectHost(hostHeader) {
+  const host = String(hostHeader || '').toLowerCase().replace(/:\d+$/, '');
+  const ours = host === domain || host.endsWith('.' + domain);
+  return ours && /^[a-z0-9.-]+$/.test(host) ? host : domain;
+}
+
 http.createServer((req, res) => {
-  const location = `https://${req.headers.host || domain}${req.url}`;
+  const reqPath  = (req.url || '/').startsWith('/') ? req.url : '/';
+  const location = `https://${redirectHost(req.headers.host)}${reqPath}`;
   res.writeHead(301, { Location: location });
   res.end();
 }).listen(80, () => {

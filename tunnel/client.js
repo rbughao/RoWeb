@@ -18,8 +18,9 @@ const path  = require('path');
 
 const { TYPES, encode, FrameParser } = require('./protocol');
 
-const RECONNECT_DELAY = 3_000;  // ms before reconnect after drop
-const PING_INTERVAL   = 25_000; // ms between client-side pings
+const RECONNECT_MIN = 3_000;   // first retry delay; doubles on each failure
+const RECONNECT_MAX = 60_000;
+const PING_INTERVAL = 25_000;
 
 /**
  * Start a tunnel and return { publicUrl, stop }.
@@ -32,6 +33,7 @@ const PING_INTERVAL   = 25_000; // ms between client-side pings
  * @param {string}  options.token        - Shared secret
  * @param {number}  options.localPort    - Local port to expose
  * @param {boolean} [options.tls=false]  - Use HTTPS/TLS for the control connection
+ * @param {boolean} [options.insecure=false] - Skip TLS certificate verification (self-signed dev certs only)
  * @param {string}  [options.subdomain]  - Preferred subdomain (server may override)
  * @returns {Promise<{ publicUrl: string, stop: () => void }>}
  */
@@ -42,14 +44,27 @@ function startTunnel(options) {
     token,
     localPort,
     tls:   useTls   = false,
+    insecure        = false,
     subdomain: preferredSubdomain = null,
   } = options;
+
+  if (useTls && insecure) {
+    console.warn('[Tunnel] WARNING: TLS certificate verification is disabled (insecure mode).');
+  }
 
   return new Promise((resolve, reject) => {
     let stopped   = false;
     let resolved  = false;
     let activeSocket = null;
     let pingTimer    = null;
+    let retryDelay   = RECONNECT_MIN;
+
+    function scheduleReconnect(reason) {
+      if (stopped) return;
+      console.error(`[Tunnel] ${reason}. Reconnecting in ${retryDelay / 1000}s...`);
+      setTimeout(connect, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, RECONNECT_MAX);
+    }
 
     function connect() {
       if (stopped) return;
@@ -59,7 +74,7 @@ function startTunnel(options) {
         host:               serverHost,
         port:               controlPort,
         path:               '/tunnel',
-        rejectUnauthorized: false, // allow self-signed certs in dev
+        rejectUnauthorized: !insecure,
         headers: {
           'Connection': 'Upgrade',
           'Upgrade':    'roweb-tunnel',
@@ -84,6 +99,7 @@ function startTunnel(options) {
           switch (type) {
 
             case TYPES.HELLO_ACK:
+              retryDelay = RECONNECT_MIN;
               clearInterval(pingTimer);
               pingTimer = setInterval(() => {
                 if (activeSocket && !activeSocket.destroyed) {
@@ -100,7 +116,7 @@ function startTunnel(options) {
               break;
 
             case TYPES.HTTP_REQ:
-              forwardRequest(payload, sock);
+              forwardRequest(requestId, payload, sock);
               break;
 
             case TYPES.PING:
@@ -121,10 +137,7 @@ function startTunnel(options) {
 
         sock.on('close', () => {
           clearInterval(pingTimer);
-          if (!stopped) {
-            console.error('[Tunnel] Disconnected. Reconnecting...');
-            setTimeout(connect, RECONNECT_DELAY);
-          }
+          scheduleReconnect('Disconnected');
         });
 
         // Send HELLO
@@ -149,16 +162,15 @@ function startTunnel(options) {
       req.on('error', err => {
         if (!resolved) {
           reject(new Error(`Cannot connect to tunnel server: ${err.message}`));
-        } else if (!stopped) {
-          console.error(`[Tunnel] ${err.message}. Reconnecting in ${RECONNECT_DELAY / 1000}s...`);
-          setTimeout(connect, RECONNECT_DELAY);
+        } else {
+          scheduleReconnect(err.message);
         }
       });
 
       req.end();
     }
 
-    function forwardRequest({ requestId, method, path: reqPath, headers, body: bodyB64 }, sock) {
+    function forwardRequest(requestId, { method, path: reqPath, headers, body: bodyB64 }, sock) {
       const bodyBuf = bodyB64 ? Buffer.from(bodyB64, 'base64') : null;
 
       // Strip headers that would confuse the local server
@@ -229,6 +241,7 @@ if (require.main === module) {
     localPort:   parseInt(flag('--port') || c.localPort  || '3000', 10),
     subdomain:   flag('--subdomain')    || c.subdomain   || null,
     tls:         has('--tls')           || !!c.tls,
+    insecure:    has('--insecure')      || !!c.insecure,
   };
 
   if (!options.serverHost) {

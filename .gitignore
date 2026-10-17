@@ -7,6 +7,9 @@ node_modules/
 # Keep the tunnel config out of version control — it contains your secret token and cert paths
 tunnel/tunnel-config.json
 
+# Persisted login-attempt / lockout state
+data/
+
 # OS
 .DS_Store
 Thumbs.db
