@@ -14,6 +14,7 @@ A zero-dependency Node.js web server that hosts multiple static sites on separat
 4. [Quick Start](#quick-start)
 5. [Configuration](#configuration)
 6. [Site Manager UI](#site-manager-ui)
+   - [Pausing a site](#pausing-a-site)
 7. [Password Protection & Rate Limiting](#password-protection--rate-limiting)
    - [Protecting Specific URLs](#protecting-specific-urls)
 8. [Tunnel System](#tunnel-system)
@@ -36,7 +37,7 @@ A zero-dependency Node.js web server that hosts multiple static sites on separat
 | **Per-URL logins** | Require a browser login only on specific paths (e.g. `/reports`) |
 | **Rate limiting** | 5 failed attempts → 10-minute lockout per IP per site, survives restarts |
 | **Hashed passwords** | Stored as scrypt hashes; default or missing passwords are replaced with random ones on startup |
-| **Live Site Manager** | Add, edit, and delete sites from a browser UI without restarting |
+| **Live Site Manager** | Add, edit, pause, resume and delete sites from a browser UI without restarting, with a live preview of the selected site |
 | **Reverse proxy tunnels** | Expose any local site to the internet via a secure public URL |
 | **Tunnel Config UI** | Set your domain, certs, and token from the browser — no file editing |
 | **Zero dependencies** | Only Node.js built-ins (`http`, `https`, `fs`, `net`, `tls`, `crypto`) |
@@ -163,6 +164,7 @@ To set a password by hand, write it as `"pass"` (like the Admin Dashboard above)
 | `root` | Yes | Folder with the site's files. Must be **inside `sitesDir`** and must not overlap another site's folder, since that would let one site serve another's files without its login |
 | `index` | No | Entry file (default: `index.html`) |
 | `host` | No | Address to listen on. Default: all interfaces. Use `"127.0.0.1"` to keep a site private to this computer |
+| `paused` | No | `true` = the site isn't served at all (its port isn't opened). Usually set with the **Pause** button rather than by hand |
 | `auth.user` | If auth | Username for Basic Auth |
 | `auth.pass` | If auth | Password (hashed automatically on startup; at least 8 characters when set from the UI) |
 | `auth.realm` | No | Label shown in the browser's login dialog |
@@ -186,13 +188,22 @@ To set a password by hand, write it as `"pass"` (like the Admin Dashboard above)
 
 Open [http://127.0.0.1:4000](http://127.0.0.1:4000) in your browser.
 
-Each site is shown as a card:
+The screen has two parts:
 
+**Site list (left).** Each site is a card. Click a card (or Tab to it and press Enter) to focus on it.
 - **Green dot / `running`**: the site's server is listening on its port
 - **`open`** or **`auth`**: whether the whole site needs a login
-- **`N protected URLs`**: how many paths have their own login (the paths are listed under the name)
-- **Tunnel link**: the public URL, when a tunnel is active
+- **`N protected URLs`**: how many paths have their own login (hover to see them)
+- **Grey dot / `⏸ paused`**: the site is paused and not being served
+- **`tunnel on`**: a public tunnel is active
+- The selected site's buttons (**Tunnel**, **Pause**/**Resume**, **Edit**, **Delete**) appear under it; other sites show theirs when you hover over them
 - **Tunnel Config dot**: grey = tunnel not configured yet, green = ready
+
+**Live preview (right).** It shows the focused site as visitors see it, with its address, its public tunnel URL when one is active, **↻ Reload** and **Open ↗** (open in a new tab).
+- The manager remembers which site you were looking at
+- After you add or edit a site, the preview switches to it and reloads, so your changes show at once
+- For a password-protected site (**🔒 login**), your browser asks for that site's login inside the preview. If no prompt appears, click **Open ↗**, log in there, then **↻ Reload**
+- On a narrow screen the list sits on top and the preview below it
 
 ![Site Manager dashboard](docs/screenshots/01-dashboard.png)
 
@@ -213,6 +224,8 @@ Each site is shown as a card:
 |---|---|
 | **Add a site** | Click **+ Add Site**, fill in name, port, root directory, and optionally enable password protection |
 | **Edit a site** | Click **Edit** on any site card — the server on that port restarts with new settings |
+| **Pause a site** | Click **⏸ Pause**. See [Pausing a site](#pausing-a-site) |
+| **Resume a site** | Click **▶ Resume** on the card, or **Resume site** in the preview |
 | **Delete a site** | Click **Delete** — stops the server and removes it from config |
 | **Toggle auth** | Use the toggle switch in the Add/Edit form to enable or disable password protection |
 | **Protect a specific URL** | In the Add/Edit form, click **+ Add URL** under *Protected URLs* |
@@ -220,6 +233,21 @@ Each site is shown as a card:
 | **Create a tunnel** | Click **🔗 Tunnel** on any site card to expose it to the internet |
 | **Stop a tunnel** | Click **Stop Tunnel** on the active card |
 | **Configure tunnel** | Click **Tunnel Config** in the toolbar |
+
+### Pausing a site
+
+Pausing takes a site offline without deleting it — handy for maintenance, or to hide a site for a while.
+
+1. Select the site and click **⏸ Pause**
+2. The site stops listening on its port, so nothing is served: no pages, no error page. Visitors' browsers just can't connect. Any active tunnel for it is closed
+3. The card turns grey with a **⏸ paused** badge, and the preview shows **This site is paused**
+4. Click **▶ Resume** (or **Resume site** in the preview) to serve it again
+
+![A paused site in the Site Manager](docs/screenshots/05-paused-site.png)
+
+The paused state is saved to `config.json` (`"paused": true`). A paused site **stays paused after a restart**, and the startup table shows it as `[paused]`. Editing a paused site keeps it paused. While a site is paused, its port stays reserved for it in the manager.
+
+If another program grabs the port while the site is paused, **Resume** reports that the port is in use; edit the site to choose another port.
 
 ---
 
@@ -460,7 +488,8 @@ Press `Ctrl+C` to stop the tunnel.
 | Wrong tunnel token | Server rejects with `401 Unauthorized` |
 | Request body over `maxBodyBytes` | Returns `413 Payload Too Large` |
 | More than `maxConcurrent` requests at once | Extra requests get `503 Service Unavailable` |
-| Site's port changed or site deleted in the manager | Its tunnel is stopped automatically |
+| Site's port changed, paused or deleted in the manager | Its tunnel is stopped automatically |
+| Site is paused | A tunnel can't be opened for it until it's resumed |
 
 ---
 
@@ -516,7 +545,8 @@ Or use a simple `systemd` unit file — see your distro's documentation.
 
 **Everywhere**
 - All servers time out slow requests (10 s for headers, 30 s for the full request)
-- Security headers on every response: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, plus a strict `Content-Security-Policy` on the Site Manager
+- Security headers on every response: `X-Content-Type-Options`, `Referrer-Policy`, plus a strict `Content-Security-Policy` on the Site Manager
+- Framing (clickjacking protection): sites can only be embedded by themselves and by the Site Manager's preview (`frame-ancestors`). The manager itself can't be embedded anywhere. The preview frame is sandboxed, so a previewed site can't navigate or script the manager
 - Sites use plain HTTP locally, so their logins can be sniffed on a shared network (e.g. café Wi-Fi). Set `"host": "127.0.0.1"` on sites that should stay private, and share them publicly through the tunnel, which is HTTPS end to end
 
 ### Site Manager API protection
