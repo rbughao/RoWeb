@@ -23,7 +23,7 @@ A zero-dependency Node.js web server that hosts multiple static sites on separat
    - [Step 3 — Create a Tunnel](#step-3--create-a-tunnel)
 9. [Running in Production](#running-in-production)
 10. [Security Notes](#security-notes)
-11. [Default Credentials](#default-credentials)
+11. [Passwords & First Run](#passwords--first-run)
 
 ---
 
@@ -35,6 +35,7 @@ A zero-dependency Node.js web server that hosts multiple static sites on separat
 | **Per-site Basic Auth** | Browser-native login dialog, configured per site |
 | **Per-URL logins** | Require a browser login only on specific paths (e.g. `/reports`) |
 | **Rate limiting** | 5 failed attempts → 10-minute lockout per IP per site, survives restarts |
+| **Hashed passwords** | Stored as scrypt hashes; default or missing passwords are replaced with random ones on startup |
 | **Live Site Manager** | Add, edit, and delete sites from a browser UI without restarting |
 | **Reverse proxy tunnels** | Expose any local site to the internet via a secure public URL |
 | **Tunnel Config UI** | Set your domain, certs, and token from the browser — no file editing |
@@ -54,13 +55,15 @@ A zero-dependency Node.js web server that hosts multiple static sites on separat
 ```
 roweb/
 ├── server.js               ← Main entry point
-├── config.json             ← Site definitions
+├── config.example.json     ← Template site definitions (committed)
+├── config.json             ← Your real config — created on first run, gitignored
 ├── lib/
 │   ├── auth.js             ← HTTP Basic Auth + rate limiting
 │   ├── fileServer.js       ← Static file serving
 │   ├── logger.js           ← Startup table + request logs
 │   ├── manager.js          ← Site Manager API server
 │   ├── mimeTypes.js        ← MIME type map
+│   ├── passwords.js        ← scrypt password hashing
 │   └── securityHeaders.js  ← Security response headers
 ├── data/                   ← Persisted lockouts (created at runtime, gitignored)
 ├── tunnel/
@@ -92,70 +95,64 @@ cd RoWeb
 node server.js
 ```
 
-You'll see a startup table like this:
+On the first run, `config.json` is created from `config.example.json`, and a **random password is generated for every login**. They're printed **once**, so copy them now:
 
 ```
+Created config.json from config.example.json.
+
+These logins had no password or a publicly known default password.
+New random passwords were generated. They are shown ONCE — note them now:
+
+  Site Manager                     user: admin      pass: <random-16-chars>
+  Admin Dashboard                  user: admin      pass: <random-16-chars>
+  Internal Wiki                    user: team       pass: <random-16-chars>
+
 ╔═════════════════════════════════════════════════════╗
 ║           Multi-Port Web Server — Started           ║
 ╠═════════════════════════════════════════════════════╣
-║  Public Home      http://localhost:3000   [auth]    ║
-║  Admin Dashboard  http://localhost:3001   [auth]    ║
-║  Internal Wiki    http://localhost:3002   [auth]    ║
+║  Public Home      http://localhost:3000     [open]  ║
+║  Admin Dashboard  http://localhost:3001     [auth]  ║
+║  Internal Wiki    http://localhost:3002     [auth]  ║
 ╚═════════════════════════════════════════════════════╝
 Press Ctrl+C to stop all servers.
-Manager UI → http://localhost:4000
+Manager UI → http://127.0.0.1:4000
 ```
+
+Lost them, or want your own? See [Passwords & First Run](#passwords--first-run).
 
 **3. Open the Site Manager**
 
-Navigate to [http://localhost:4000](http://localhost:4000) in your browser.
-Default credentials: `admin` / `manager123`. See [Site Manager UI](#site-manager-ui) for a walkthrough.
+Navigate to [http://127.0.0.1:4000](http://127.0.0.1:4000) and log in as `admin` with the Site Manager password from the console. See [Site Manager UI](#site-manager-ui) for a walkthrough.
+
+> The manager only listens on `127.0.0.1`, so it can only be opened from this computer. Use `127.0.0.1` rather than `localhost` — on Windows, `localhost` tries IPv6 first and each request waits about 200 ms before falling back.
 
 ---
 
 ## Configuration
 
-All sites are defined in `config.json` at the project root.
+All sites are defined in `config.json` at the project root. It's created from `config.example.json` on first run and is **gitignored**, so your settings and password hashes never end up on GitHub.
 
 ```json
 {
+  "sitesDir": "./sites",
   "manager": {
     "port": 4000,
-    "auth": {
-      "user": "admin",
-      "pass": "manager123",
-      "realm": "Site Manager"
-    }
+    "host": "127.0.0.1",
+    "auth": { "user": "admin", "realm": "Site Manager" }
   },
   "sites": [
-    {
-      "name": "Public Home",
-      "port": 3000,
-      "root": "./sites/home"
-    },
+    { "name": "Public Home", "port": 3000, "root": "./sites/home" },
     {
       "name": "Admin Dashboard",
       "port": 3001,
       "root": "./sites/admin",
-      "auth": {
-        "user": "admin",
-        "pass": "secret123",
-        "realm": "Admin Area"
-      }
-    },
-    {
-      "name": "Internal Wiki",
-      "port": 3002,
-      "root": "./sites/wiki",
-      "index": "wiki.html",
-      "auth": {
-        "user": "team",
-        "pass": "wiki2024"
-      }
+      "auth": { "user": "admin", "pass": "my-new-password", "realm": "Admin Area" }
     }
   ]
 }
 ```
+
+To set a password by hand, write it as `"pass"` (like the Admin Dashboard above) and restart. On startup it's replaced with a `"passHash"` (scrypt), so the plaintext never stays on disk.
 
 ### Site fields
 
@@ -163,20 +160,23 @@ All sites are defined in `config.json` at the project root.
 |---|---|---|
 | `name` | Yes | Human-readable label shown in logs and UI |
 | `port` | Yes | Port to bind this site to |
-| `root` | Yes | Path to the folder containing the site's files |
+| `root` | Yes | Folder with the site's files. Must be **inside `sitesDir`** and must not overlap another site's folder, since that would let one site serve another's files without its login |
 | `index` | No | Entry file (default: `index.html`) |
+| `host` | No | Address to listen on. Default: all interfaces. Use `"127.0.0.1"` to keep a site private to this computer |
 | `auth.user` | If auth | Username for Basic Auth |
-| `auth.pass` | If auth | Password for Basic Auth |
+| `auth.pass` | If auth | Password (hashed automatically on startup; at least 8 characters when set from the UI) |
 | `auth.realm` | No | Label shown in the browser's login dialog |
 | `protectedPaths` | No | List of URL-specific logins — see [Protecting Specific URLs](#protecting-specific-urls) |
 
-### Manager fields
+### Top-level and manager fields
 
 | Field | Required | Description |
 |---|---|---|
+| `sitesDir` | No | Folder all site roots must live in. Default `./sites`. Only editable in this file, not from the UI |
 | `manager.port` | Yes | Port for the Site Manager UI |
-| `manager.auth` | Recommended | Login for the Site Manager (same shape as site `auth`) |
-| `manager.allowedHosts` | No | Extra hostnames allowed to reach the manager, e.g. `["myserver.lan"]`. `localhost` and IP addresses always work. Anything else gets `403` (blocks DNS-rebinding attacks). |
+| `manager.host` | No | Address the manager listens on. Default `127.0.0.1` (this computer only). Setting `0.0.0.0` exposes it to your network over plain HTTP, which isn't recommended |
+| `manager.auth` | Yes | Login for the Site Manager. If missing, it's created with a random password |
+| `manager.allowedHosts` | No | Extra hostnames allowed to reach the manager, e.g. `["myserver.lan"]`. `localhost` and IP addresses always work. Anything else gets `403` (blocks DNS-rebinding attacks) |
 
 > **Tip:** You can also manage all of this from the Site Manager UI — changes take effect immediately without restarting.
 
@@ -184,7 +184,7 @@ All sites are defined in `config.json` at the project root.
 
 ## Site Manager UI
 
-Open [http://localhost:4000](http://localhost:4000) in your browser.
+Open [http://127.0.0.1:4000](http://127.0.0.1:4000) in your browser.
 
 Each site is shown as a card:
 
@@ -198,10 +198,10 @@ Each site is shown as a card:
 
 ### Adding a site (step by step)
 
-1. Create a folder for the site's files, e.g. `sites/blog/`, and put an `index.html` in it
+1. Create a folder for the site's files **inside `sites/`**, e.g. `sites/blog/`, and put an `index.html` in it
 2. Click **+ Add Site**
 3. Fill in **Site Name**, a free **Port** (e.g. `3005`) and the **Root Directory** (`./sites/blog`)
-4. *(Optional)* Turn on **Password Protection** to put the whole site behind a login, then set a username, password and realm (the label shown in the browser's login box)
+4. *(Optional)* Turn on **Password Protection** to put the whole site behind a login, then set a username, a password of at least 8 characters, and a realm (the label shown in the browser's login box)
 5. *(Optional)* Click **+ Add URL** to protect only certain paths. See [Protecting Specific URLs](#protecting-specific-urls)
 6. Click **Add Site**. The site starts right away at `http://localhost:3005`, with no restart needed
 
@@ -241,14 +241,15 @@ When a browser accesses a protected site it shows the native login dialog. All f
 
 ### Rate limiting
 
-To prevent brute-force attacks, failed login attempts are tracked **per IP address per port**:
+To prevent brute-force attacks, failed login attempts are tracked **per client per port**:
 
-- After **5 failed attempts**, that IP is locked out for **10 minutes**
+- After **5 failed attempts**, that client is locked out for **10 minutes**
+- A "client" is one IPv4 address, or a whole IPv6 **/64** block (one user typically controls millions of addresses in a /64)
+- If a site gets **100 failed attempts in 10 minutes from all clients combined** (e.g. a botnet), new logins on that site are paused for 10 minutes. People who already logged in successfully keep working
 - The lockout countdown is sent in the `Retry-After` response header
-- Even correct credentials are rejected during a lockout
-- A successful login resets the attempt counter
+- A successful login resets the counter
 - Lockouts are saved to `data/login-attempts.json`, so restarting the server doesn't clear them
-- Tunnelled visitors are tracked by their real public IP (passed by the tunnel server in `X-Forwarded-For`)
+- Tunnelled visitors are tracked by their real public IP. The tunnel server overwrites `X-Forwarded-For`, and when another proxy (nginx, Caddy) sits in front, only the last address — the one your proxy added — is trusted
 
 ```
 HTTP/1.1 429 Too Many Requests
@@ -310,7 +311,7 @@ Public User
     │  HTTPS  → a3f9c1b2.yourdomain.com
     ▼
 Tunnel Server (your VPS)
-    │  persistent TCP connection
+    │  persistent TLS-encrypted connection (port 7000)
     ▼
 Tunnel Client (your local machine)
     │  HTTP  → localhost:3001
@@ -323,14 +324,17 @@ Local Site (running via server.js)
 You need:
 - A **VPS** (DigitalOcean, Hetzner, Linode, etc.) with a public IP address
 - A **domain name** with a **wildcard DNS record**: `*.yourdomain.com → VPS IP`
-- A **TLS certificate** covering `*.yourdomain.com` — [Let's Encrypt](https://letsencrypt.org/) with certbot is free
+- A **TLS certificate** covering **both** `yourdomain.com` and `*.yourdomain.com`. The wildcard serves visitors, and the plain domain secures the control connection your PC makes. [Let's Encrypt](https://letsencrypt.org/) is free; wildcards need the DNS challenge:
+  ```bash
+  sudo certbot certonly --manual --preferred-challenges dns -d yourdomain.com -d '*.yourdomain.com'
+  ```
 - Ports **80**, **443**, and **7000** open on your VPS firewall
 
 ---
 
 ### Step 1 — Configure via Site Manager
 
-1. Open the Site Manager at [http://localhost:4000](http://localhost:4000)
+1. Open the Site Manager at [http://127.0.0.1:4000](http://127.0.0.1:4000)
 2. Click **Tunnel Config** in the top toolbar
 3. Fill in the form:
 
@@ -342,7 +346,7 @@ You need:
 | **TLS Key** | `/etc/letsencrypt/live/yourdomain.com/privkey.pem` | Full path on the VPS |
 | **Shared Token** | *(click Generate)* | Secret shared between server and client — keep this private |
 | **Server Host** | `yourdomain.com` | Auto-filled from Domain field |
-| **TLS on control** | Off | Enable only if your control port uses HTTPS |
+| **TLS on control connection** | **On** | Encrypts the token, visitors' logins and all page content between the VPS and your PC. Leave it on |
 | **Allow self-signed certificate** | Off | Skips certificate checks on the control connection. Development only — leave off in production |
 
 Optional settings you can add by hand to the `server` block of `tunnel-config.json`:
@@ -350,7 +354,10 @@ Optional settings you can add by hand to the `server` block of `tunnel-config.js
 | Field | Default | Description |
 |---|---|---|
 | `maxBodyBytes` | `10485760` (10 MB) | Larger request bodies get `413 Payload Too Large` |
+| `maxConcurrent` | `50` | Simultaneous public requests per tunnel; more get `503` (protects VPS memory) |
+| `maxFrameBytes` | `268435456` (256 MB) | Largest single response a tunnel client may send back |
 | `requestTimeout` | `30000` | Milliseconds to wait for the local site before returning `504` |
+| `controlTls` | `true` | Set `false` **only** if a TLS-terminating proxy already sits in front of the control port |
 
 ![Tunnel Configuration form](docs/screenshots/04-tunnel-config.png)
 
@@ -380,7 +387,7 @@ You should see:
 
 ```
 Tunnel server ready — domain: *.yourdomain.com
-Control server  :7000
+Control server  :7000  (TLS)
 Public HTTPS    :443  (*.yourdomain.com)
 HTTP redirect   :80  → HTTPS
 ```
@@ -401,8 +408,8 @@ pm2 startup
 
 **Option A — via Site Manager UI (recommended)**
 
-1. Open [http://localhost:4000](http://localhost:4000)
-2. Find the site you want to expose
+1. Open [http://127.0.0.1:4000](http://127.0.0.1:4000)
+2. Find the site you want to expose (only configured sites can be tunnelled)
 3. Click the **🔗 Tunnel** button
 4. The card updates instantly with a clickable public URL:
    `🌐 https://a3f9c1b2.yourdomain.com`
@@ -424,9 +431,10 @@ node tunnel/client.js \
   --control-port 7000 \
   --token YOUR_SECRET \
   --subdomain mysite \
-  --tls \
   --insecure        # accept a self-signed cert (dev only)
 ```
+
+TLS is on by default. `--no-tls` turns it off, but only use that when a TLS proxy sits in front of the control port; otherwise the token and all traffic travel unencrypted.
 
 If the connection drops, the client reconnects automatically, waiting 3 s, then 6 s, 12 s … up to 60 s between attempts.
 
@@ -451,6 +459,8 @@ Press `Ctrl+C` to stop the tunnel.
 | Site has Basic Auth | Auth challenge is preserved end-to-end |
 | Wrong tunnel token | Server rejects with `401 Unauthorized` |
 | Request body over `maxBodyBytes` | Returns `413 Payload Too Large` |
+| More than `maxConcurrent` requests at once | Extra requests get `503 Service Unavailable` |
+| Site's port changed or site deleted in the manager | Its tunnel is stopped automatically |
 
 ---
 
@@ -479,17 +489,35 @@ Or use a simple `systemd` unit file — see your distro's documentation.
 
 ## Security Notes
 
-- **`tunnel/tunnel-config.json` is gitignored** — it contains your token and cert paths and should never be committed
-- Change **all default passwords** before deploying publicly — the server prints a warning while the manager uses the default
+**Secrets**
+- **`config.json` and `tunnel/tunnel-config.json` are gitignored.** Only `config.example.json` (no passwords) is committed
+- Passwords are stored as **scrypt hashes**. Plaintext `"pass"` values are hashed on the next startup
+- Missing, default or publicly known passwords (`manager123`, `secret123`, `wiki2024`, …) are **replaced with random ones** on startup and printed once
 - The shared tunnel token should be at least 32 random characters — use the **Generate** button in the UI
-- Passwords and tokens are compared in constant time (SHA-256 + `timingSafeEqual`), so neither content nor length leaks through timing
-- Rate limiting is per-IP per-port, persists across restarts, and applies to tunnelled traffic by real client IP
+- Usernames, passwords and tokens are compared in constant time, so nothing leaks through response timing
+
+**Site Manager**
+- Listens on `127.0.0.1` only by default, so other machines on your network can't reach it
+- Site folders must live inside `sitesDir` and can't overlap, so a stolen manager login can't publish `C:\` or another site's files
+- Tunnels can only be opened for configured sites, never arbitrary local ports (or the manager itself)
+
+**File serving**
 - Directory traversal (`../`, `%2e%2e`, null bytes) is blocked with `403 Forbidden`
-- The tunnel client verifies the server's TLS certificate unless you explicitly enable insecure mode
-- Hop-by-hop headers are stripped when proxying; `X-Forwarded-For` is overwritten so visitors can't spoof their IP
+- Hidden files and folders (`.git`, `.env`, `.htpasswd`, …) are never served; `.well-known` is allowed
+- Login rules are checked against the canonical on-disk path, and **that exact file** is the one served. Windows tricks like `NOTES~1.HTM`, `file::$DATA` or different letter case can't bypass a rule
+- Symlinks that point outside a site's folder are not followed
+
+**Tunnel**
+- The control connection is **TLS-encrypted by default**, and the client verifies the server's certificate unless you explicitly enable insecure mode
+- Each control connection can register only one subdomain
+- Limits: request body size, concurrent requests per tunnel, and maximum message size
+- Connection-level headers (`Connection`, `Transfer-Encoding`, `Keep-Alive`, …) are stripped in both directions; `X-Forwarded-For` is overwritten so visitors can't spoof their IP
 - HTTP → HTTPS redirects only ever point at your own domain
+
+**Everywhere**
 - All servers time out slow requests (10 s for headers, 30 s for the full request)
 - Security headers on every response: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, plus a strict `Content-Security-Policy` on the Site Manager
+- Sites use plain HTTP locally, so their logins can be sniffed on a shared network (e.g. café Wi-Fi). Set `"host": "127.0.0.1"` on sites that should stay private, and share them publicly through the tunnel, which is HTTPS end to end
 
 ### Site Manager API protection
 
@@ -497,22 +525,31 @@ Or use a simple `systemd` unit file — see your distro's documentation.
 - No CORS headers are sent, so other websites can't read API responses
 - Every state-changing API call (`POST`/`PUT`/`DELETE`) must include the header `X-Requested-With: RoWeb`, and a cross-site `Origin` is rejected. This blocks CSRF. If you script against the API, add the header:
   ```bash
-  curl -u admin:manager123 -H "X-Requested-With: RoWeb" -X DELETE http://localhost:4000/api/sites/3002
+  curl -u admin:YOUR_PASSWORD -H "X-Requested-With: RoWeb" -X DELETE http://127.0.0.1:4000/api/sites/3002
   ```
+- New passwords set through the API must be at least 8 characters and not a known default
 - Requests whose `Host` isn't `localhost`, an IP address, or listed in `manager.allowedHosts` are rejected (DNS-rebinding protection)
 
 ---
 
-## Default Credentials
+## Passwords & First Run
 
-> **Change these before exposing any site to the internet.**
+There are **no default passwords**. On startup, any login whose password is missing or publicly known gets a random password, printed once in the console:
 
-| Site | Port | Username | Password |
-|---|---|---|---|
-| Public Home | 3000 | — (open) | — |
-| Admin Dashboard | 3001 | `admin` | `secret123` |
-| Internal Wiki | 3002 | `team` | `wiki2024` |
-| **Site Manager** | **4000** | **`admin`** | **`manager123`** |
+| Login | Port | Username |
+|---|---|---|
+| Public Home | 3000 | — (open, no login) |
+| Admin Dashboard | 3001 | `admin` |
+| Internal Wiki | 3002 | `team` |
+| **Site Manager** | **4000** | **`admin`** |
+
+**Set your own password (or recover a lost one):**
+
+1. Stop the server
+2. In `config.json`, find the login and replace its `"passHash": "scrypt$…"` line with `"pass": "your-new-password"`
+3. Start the server again. The password is hashed automatically, and the plaintext is removed from the file
+
+For site logins you can also just type a new password in the Site Manager's **Edit** form.
 
 ---
 
