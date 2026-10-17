@@ -513,10 +513,10 @@
       <div class="toggle-row">
         <label for="tc-tls">
           TLS on control connection
-          <small>Enable if your control port uses HTTPS</small>
+          <small>Keep on — encrypts the token and all tunnelled traffic. Turn off only if a TLS proxy sits in front of the control port</small>
         </label>
         <div class="toggle">
-          <input type="checkbox" id="tc-tls">
+          <input type="checkbox" id="tc-tls" checked>
           <label for="tc-tls" class="toggle-track"></label>
         </div>
       </div>
@@ -899,7 +899,7 @@
       document.getElementById('tc-token').value        = s.token       || '';
       document.getElementById('tc-client-host').value  = c.serverHost  || s.domain || '';
       document.getElementById('tc-client-port').value  = c.controlPort || s.controlPort || 7000;
-      document.getElementById('tc-tls').checked        = !!c.tls;
+      document.getElementById('tc-tls').checked        = c.tls !== false;
       document.getElementById('tc-insecure').checked   = !!c.insecure;
 
       updateTunnelCfgStatus(data.config);

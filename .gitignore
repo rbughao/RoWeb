@@ -4,6 +4,9 @@ node_modules/
 # Claude Code local settings
 .claude/
 
+# Real site config holds password hashes — only config.example.json is committed
+config.json
+
 # Keep the tunnel config out of version control — it contains your secret token and cert paths
 tunnel/tunnel-config.json
 

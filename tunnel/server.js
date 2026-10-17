@@ -17,7 +17,7 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 
-const { TYPES, encode, FrameParser } = require('./protocol');
+const { TYPES, encode, FrameParser, stripHopByHop } = require('./protocol');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -38,7 +38,11 @@ const {
   keyFile,
   requestTimeout = 30000,
   maxBodyBytes   = 10 * 1024 * 1024,
+  maxConcurrent  = 50,                  // in-flight public requests per tunnel
+  maxFrameBytes  = 256 * 1024 * 1024,   // largest response a tunnel client may send back
 } = srv;
+// Control connections carry the token, visitors' logins and page content — encrypt by default
+const controlTls = srv.controlTls !== false;
 const domain = String(srv.domain || '').toLowerCase();
 
 if (!domain) { console.error('tunnel-config.json: server.domain is required');  process.exit(1); }
@@ -79,7 +83,7 @@ function newReqId() {
 }
 
 function assignSubdomain(preferred) {
-  const candidate = (preferred || '').replace(/[^a-z0-9-]/gi, '').slice(0, 32);
+  const candidate = String(preferred || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32);
   if (candidate && !tunnels.has(candidate)) return candidate;
   let sub;
   do { sub = crypto.randomBytes(4).toString('hex'); } while (tunnels.has(sub));
@@ -88,10 +92,14 @@ function assignSubdomain(preferred) {
 
 // ── Control server (accepts tunnel client connections) ────────────────────────
 
-const controlServer = http.createServer((_req, res) => {
+const controlHandler = (_req, res) => {
   res.writeHead(400, { 'Content-Type': 'text/plain' });
   res.end('Use HTTP Upgrade for tunnel connections.');
-});
+};
+const controlServer = controlTls
+  ? https.createServer({ cert, key }, controlHandler)
+  : http.createServer(controlHandler);
+controlServer.headersTimeout = 10_000;
 
 controlServer.on('upgrade', (req, socket, head) => {
   socket.on('error', () => socket.destroy());
@@ -107,7 +115,7 @@ controlServer.on('upgrade', (req, socket, head) => {
 
   socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: roweb-tunnel\r\nConnection: Upgrade\r\n\r\n');
 
-  const parser  = new FrameParser();
+  const parser  = new FrameParser(maxFrameBytes);
   const pending = new Map(); // requestId → { resolve, reject, timer }
   let subdomain = null;
 
@@ -118,9 +126,14 @@ controlServer.on('upgrade', (req, socket, head) => {
     switch (type) {
 
       case TYPES.HELLO: {
+        // One subdomain per connection; extra HELLOs would leave stale registrations behind
+        if (subdomain) {
+          socket.write(encode(TYPES.ERROR, 0, { message: 'Already registered on this connection.' }));
+          break;
+        }
         subdomain = assignSubdomain(payload.subdomain);
         const publicUrl = `https://${subdomain}.${domain}`;
-        tunnels.set(subdomain, { socket, parser, pending });
+        tunnels.set(subdomain, { socket, parser, pending, inflight: 0 });
         socket.write(encode(TYPES.HELLO_ACK, 0, { subdomain, publicUrl }));
         console.log(`[+] ${publicUrl}  (port ${payload.localPort})`);
         break;
@@ -181,7 +194,7 @@ controlServer.on('upgrade', (req, socket, head) => {
 });
 
 controlServer.listen(controlPort, () => {
-  console.log(`Control server  :${controlPort}`);
+  console.log(`Control server  :${controlPort}  (${controlTls ? 'TLS' : 'PLAIN TCP — token and traffic are unencrypted'})`);
 });
 
 // ── Public HTTPS server ───────────────────────────────────────────────────────
@@ -207,6 +220,14 @@ const publicServer = https.createServer({ cert, key }, (req, res) => {
   };
 
   if (parseInt(req.headers['content-length'] || '0', 10) > maxBodyBytes) return tooLarge();
+
+  // Bound memory: each in-flight request may buffer up to maxBodyBytes
+  if (tunnel.inflight >= maxConcurrent) {
+    res.writeHead(503, { 'Content-Type': 'text/plain', 'Retry-After': '5' });
+    return res.end('503 Service Unavailable — too many concurrent requests for this tunnel.');
+  }
+  tunnel.inflight++;
+  res.on('close', () => { tunnel.inflight--; });
 
   const chunks = [];
   let size = 0;
@@ -235,7 +256,7 @@ const publicServer = https.createServer({ cert, key }, (req, res) => {
       path:    req.url,
       // Overwrite (never append) so clients can't spoof their IP to dodge rate limiting
       headers: {
-        ...req.headers,
+        ...stripHopByHop(req.headers),
         'x-forwarded-for':   req.socket.remoteAddress || '',
         'x-forwarded-proto': 'https',
         'x-forwarded-host':  host,
@@ -246,12 +267,8 @@ const publicServer = https.createServer({ cert, key }, (req, res) => {
     responsePromise
       .then(({ statusCode, headers, body: resBodyB64 }) => {
         const resBody = Buffer.from(resBodyB64 || '', 'base64');
-        // Strip hop-by-hop headers
-        const safe = Object.fromEntries(
-          Object.entries(headers || {}).filter(([k]) =>
-            !['connection', 'transfer-encoding', 'keep-alive', 'upgrade'].includes(k.toLowerCase())
-          )
-        );
+        const safe = stripHopByHop(headers, ['content-length']);
+        safe['content-length'] = resBody.length;
         res.writeHead(statusCode, safe);
         res.end(resBody);
       })

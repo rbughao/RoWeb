@@ -1,9 +1,10 @@
 {
+  "sitesDir": "./sites",
   "manager": {
     "port": 4000,
+    "host": "127.0.0.1",
     "auth": {
       "user": "admin",
-      "pass": "manager123",
       "realm": "Site Manager"
     }
   },
@@ -19,7 +20,6 @@
       "root": "./sites/admin",
       "auth": {
         "user": "admin",
-        "pass": "secret123",
         "realm": "Admin Area"
       }
     },
@@ -29,8 +29,7 @@
       "root": "./sites/wiki",
       "index": "wiki.html",
       "auth": {
-        "user": "team",
-        "pass": "wiki2024"
+        "user": "team"
       }
     }
   ]

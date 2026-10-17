@@ -4,7 +4,7 @@
  * Tunnel Client — runs on your local machine alongside server.js.
  *
  * Standalone CLI:
- *   node tunnel/client.js --port 3001 --server tunnel.yourdomain.com --token SECRET
+ *   node tunnel/client.js --port 3001 --server yourdomain.com --token SECRET   (TLS by default; --no-tls to disable)
  *
  * Programmatic (used by Site Manager):
  *   const { startTunnel } = require('./tunnel/client');
@@ -16,7 +16,7 @@ const https = require('https');
 const fs    = require('fs');
 const path  = require('path');
 
-const { TYPES, encode, FrameParser } = require('./protocol');
+const { TYPES, encode, FrameParser, stripHopByHop } = require('./protocol');
 
 const RECONNECT_MIN = 3_000;   // first retry delay; doubles on each failure
 const RECONNECT_MAX = 60_000;
@@ -32,7 +32,7 @@ const PING_INTERVAL = 25_000;
  * @param {number}  [options.controlPort=7000]
  * @param {string}  options.token        - Shared secret
  * @param {number}  options.localPort    - Local port to expose
- * @param {boolean} [options.tls=false]  - Use HTTPS/TLS for the control connection
+ * @param {boolean} [options.tls=true]   - Use TLS for the control connection
  * @param {boolean} [options.insecure=false] - Skip TLS certificate verification (self-signed dev certs only)
  * @param {string}  [options.subdomain]  - Preferred subdomain (server may override)
  * @returns {Promise<{ publicUrl: string, stop: () => void }>}
@@ -43,12 +43,14 @@ function startTunnel(options) {
     controlPort = 7000,
     token,
     localPort,
-    tls:   useTls   = false,
+    tls:   useTls   = true,
     insecure        = false,
     subdomain: preferredSubdomain = null,
   } = options;
 
-  if (useTls && insecure) {
+  if (!useTls) {
+    console.warn('[Tunnel] WARNING: TLS is off — the token, visitors\' logins and page content cross the internet unencrypted.');
+  } else if (insecure) {
     console.warn('[Tunnel] WARNING: TLS certificate verification is disabled (insecure mode).');
   }
 
@@ -133,7 +135,10 @@ function startTunnel(options) {
           }
         });
 
-        parser.on('error', err => console.error(`[Tunnel] Frame error: ${err.message}`));
+        parser.on('error', err => {
+          console.error(`[Tunnel] Frame error: ${err.message}`);
+          sock.destroy();
+        });
 
         sock.on('close', () => {
           clearInterval(pingTimer);
@@ -173,14 +178,18 @@ function startTunnel(options) {
     function forwardRequest(requestId, { method, path: reqPath, headers, body: bodyB64 }, sock) {
       const bodyBuf = bodyB64 ? Buffer.from(bodyB64, 'base64') : null;
 
-      // Strip headers that would confuse the local server
-      const fwdHeaders = Object.fromEntries(
-        Object.entries(headers || {}).filter(([k]) =>
-          !['host', 'connection', 'upgrade'].includes(k.toLowerCase())
-        )
-      );
+      if (typeof reqPath !== 'string' || !reqPath.startsWith('/')) {
+        return sock.write(encode(TYPES.HTTP_RES, requestId, {
+          statusCode: 400,
+          headers:    { 'content-type': 'text/plain' },
+          body:       Buffer.from('400 Bad Request').toString('base64'),
+        }));
+      }
+
+      // The body arrives fully buffered, so the original framing headers no longer apply
+      const fwdHeaders = stripHopByHop(headers, ['host', 'content-length']);
       fwdHeaders['host'] = `localhost:${localPort}`;
-      if (bodyBuf) fwdHeaders['content-length'] = String(bodyBuf.length);
+      if (bodyBuf && bodyBuf.length > 0) fwdHeaders['content-length'] = String(bodyBuf.length);
 
       const localReq = http.request({
         hostname: '127.0.0.1',
@@ -240,7 +249,7 @@ if (require.main === module) {
     token:       flag('--token')        || c.token        || '',
     localPort:   parseInt(flag('--port') || c.localPort  || '3000', 10),
     subdomain:   flag('--subdomain')    || c.subdomain   || null,
-    tls:         has('--tls')           || !!c.tls,
+    tls:         !has('--no-tls')       && c.tls !== false,
     insecure:    has('--insecure')      || !!c.insecure,
   };
 

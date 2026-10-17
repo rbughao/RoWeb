@@ -25,17 +25,37 @@ function encode(type, requestId, payload) {
   return frame;
 }
 
+// Headers that describe a single connection and must not be forwarded by a proxy (RFC 9110 §7.6.1)
+const HOP_BY_HOP = ['connection', 'keep-alive', 'proxy-connection', 'proxy-authenticate', 'proxy-authorization',
+                    'te', 'trailer', 'transfer-encoding', 'upgrade'];
+
+function stripHopByHop(headers, extra = []) {
+  const listed = String((headers || {}).connection || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+  const drop = new Set([...HOP_BY_HOP, ...listed, ...extra]);
+  return Object.fromEntries(Object.entries(headers || {}).filter(([k]) => !drop.has(k.toLowerCase())));
+}
+
 // Accumulates raw socket data and emits complete frames as { type, requestId, payload }.
+// Emits 'error' (and stops) if the peer announces a frame larger than maxPayload.
 class FrameParser extends EventEmitter {
-  constructor() {
+  constructor(maxPayload = 64 * 1024 * 1024) {
     super();
     this._buf = Buffer.alloc(0);
+    this._max = maxPayload;
+    this._dead = false;
   }
 
   push(chunk) {
+    if (this._dead) return;
     this._buf = Buffer.concat([this._buf, chunk]);
     while (this._buf.length >= HEADER_SIZE) {
       const payloadLen = this._buf.readUInt32BE(5);
+      if (payloadLen > this._max) {
+        this._dead = true;
+        this._buf = Buffer.alloc(0);
+        this.emit('error', new Error(`Frame of ${payloadLen} bytes exceeds the ${this._max}-byte limit`));
+        return;
+      }
       if (this._buf.length < HEADER_SIZE + payloadLen) break;
 
       const type       = this._buf[0];
@@ -44,6 +64,7 @@ class FrameParser extends EventEmitter {
       try {
         payload = JSON.parse(this._buf.slice(HEADER_SIZE, HEADER_SIZE + payloadLen).toString('utf8'));
       } catch (e) {
+        this._dead = true;
         this.emit('error', new Error(`Frame parse error: ${e.message}`));
         return;
       }
@@ -54,4 +75,4 @@ class FrameParser extends EventEmitter {
   }
 }
 
-module.exports = { TYPES, encode, FrameParser };
+module.exports = { TYPES, encode, FrameParser, stripHopByHop };
