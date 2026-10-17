@@ -15,6 +15,7 @@ A zero-dependency Node.js web server that hosts multiple static sites on separat
 5. [Configuration](#configuration)
 6. [Site Manager UI](#site-manager-ui)
 7. [Password Protection & Rate Limiting](#password-protection--rate-limiting)
+   - [Protecting Specific URLs](#protecting-specific-urls)
 8. [Tunnel System](#tunnel-system)
    - [How It Works](#how-it-works)
    - [Step 1 — Configure via Site Manager](#step-1--configure-via-site-manager)
@@ -32,7 +33,8 @@ A zero-dependency Node.js web server that hosts multiple static sites on separat
 |---|---|
 | **Multi-port hosting** | Each site runs on its own port, fully isolated |
 | **Per-site Basic Auth** | Browser-native login dialog, configured per site |
-| **Rate limiting** | 5 failed attempts → 10-minute lockout per IP per site |
+| **Per-URL logins** | Require a browser login only on specific paths (e.g. `/reports`) |
+| **Rate limiting** | 5 failed attempts → 10-minute lockout per IP per site, survives restarts |
 | **Live Site Manager** | Add, edit, and delete sites from a browser UI without restarting |
 | **Reverse proxy tunnels** | Expose any local site to the internet via a secure public URL |
 | **Tunnel Config UI** | Set your domain, certs, and token from the browser — no file editing |
@@ -58,7 +60,9 @@ roweb/
 │   ├── fileServer.js       ← Static file serving
 │   ├── logger.js           ← Startup table + request logs
 │   ├── manager.js          ← Site Manager API server
-│   └── mimeTypes.js        ← MIME type map
+│   ├── mimeTypes.js        ← MIME type map
+│   └── securityHeaders.js  ← Security response headers
+├── data/                   ← Persisted lockouts (created at runtime, gitignored)
 ├── tunnel/
 │   ├── server.js           ← Tunnel server (deploy on VPS)
 │   ├── client.js           ← Tunnel client (runs locally)
@@ -105,7 +109,7 @@ Manager UI → http://localhost:4000
 **3. Open the Site Manager**
 
 Navigate to [http://localhost:4000](http://localhost:4000) in your browser.
-Default credentials: `admin` / `manager123`
+Default credentials: `admin` / `manager123`. See [Site Manager UI](#site-manager-ui) for a walkthrough.
 
 ---
 
@@ -164,6 +168,15 @@ All sites are defined in `config.json` at the project root.
 | `auth.user` | If auth | Username for Basic Auth |
 | `auth.pass` | If auth | Password for Basic Auth |
 | `auth.realm` | No | Label shown in the browser's login dialog |
+| `protectedPaths` | No | List of URL-specific logins — see [Protecting Specific URLs](#protecting-specific-urls) |
+
+### Manager fields
+
+| Field | Required | Description |
+|---|---|---|
+| `manager.port` | Yes | Port for the Site Manager UI |
+| `manager.auth` | Recommended | Login for the Site Manager (same shape as site `auth`) |
+| `manager.allowedHosts` | No | Extra hostnames allowed to reach the manager, e.g. `["myserver.lan"]`. `localhost` and IP addresses always work. Anything else gets `403` (blocks DNS-rebinding attacks). |
 
 > **Tip:** You can also manage all of this from the Site Manager UI — changes take effect immediately without restarting.
 
@@ -173,7 +186,26 @@ All sites are defined in `config.json` at the project root.
 
 Open [http://localhost:4000](http://localhost:4000) in your browser.
 
-![Site Manager](https://img.shields.io/badge/port-4000-indigo)
+Each site is shown as a card:
+
+- **Green dot / `running`**: the site's server is listening on its port
+- **`open`** or **`auth`**: whether the whole site needs a login
+- **`N protected URLs`**: how many paths have their own login (the paths are listed under the name)
+- **Tunnel link**: the public URL, when a tunnel is active
+- **Tunnel Config dot**: grey = tunnel not configured yet, green = ready
+
+![Site Manager dashboard](docs/screenshots/01-dashboard.png)
+
+### Adding a site (step by step)
+
+1. Create a folder for the site's files, e.g. `sites/blog/`, and put an `index.html` in it
+2. Click **+ Add Site**
+3. Fill in **Site Name**, a free **Port** (e.g. `3005`) and the **Root Directory** (`./sites/blog`)
+4. *(Optional)* Turn on **Password Protection** to put the whole site behind a login, then set a username, password and realm (the label shown in the browser's login box)
+5. *(Optional)* Click **+ Add URL** to protect only certain paths. See [Protecting Specific URLs](#protecting-specific-urls)
+6. Click **Add Site**. The site starts right away at `http://localhost:3005`, with no restart needed
+
+![Add Site form with password protection enabled](docs/screenshots/02-add-site.png)
 
 ### What you can do
 
@@ -183,6 +215,8 @@ Open [http://localhost:4000](http://localhost:4000) in your browser.
 | **Edit a site** | Click **Edit** on any site card — the server on that port restarts with new settings |
 | **Delete a site** | Click **Delete** — stops the server and removes it from config |
 | **Toggle auth** | Use the toggle switch in the Add/Edit form to enable or disable password protection |
+| **Protect a specific URL** | In the Add/Edit form, click **+ Add URL** under *Protected URLs* |
+| **Change a password** | Type a new one in Edit. Leave it blank to keep the current password — passwords are never sent back to the browser |
 | **Create a tunnel** | Click **🔗 Tunnel** on any site card to expose it to the internet |
 | **Stop a tunnel** | Click **Stop Tunnel** on the active card |
 | **Configure tunnel** | Click **Tunnel Config** in the toolbar |
@@ -213,11 +247,55 @@ To prevent brute-force attacks, failed login attempts are tracked **per IP addre
 - The lockout countdown is sent in the `Retry-After` response header
 - Even correct credentials are rejected during a lockout
 - A successful login resets the attempt counter
+- Lockouts are saved to `data/login-attempts.json`, so restarting the server doesn't clear them
+- Tunnelled visitors are tracked by their real public IP (passed by the tunnel server in `X-Forwarded-For`)
 
 ```
 HTTP/1.1 429 Too Many Requests
 Retry-After: 600
 ```
+
+### Protecting Specific URLs
+
+You can require a browser login on specific paths only — for example, keep a site public but lock down `/reports`.
+
+**From the Site Manager:**
+
+1. Click **Edit** on the site
+2. Under **Protected URLs**, click **+ Add URL** (once per path)
+3. Enter the **URL path** (e.g. `/reports`), a **username**, a **password**, and optionally a **realm**
+4. Click **Save Changes**. It takes effect immediately; visiting that URL now pops up the browser's login box
+
+When editing an existing rule, leave the password blank to keep the current one. Click **Remove** to delete a rule.
+
+![Protected URLs in the Edit Site form](docs/screenshots/03-protected-urls.png)
+
+**From `config.json`:**
+
+```json
+{
+  "name": "Public Home",
+  "port": 3000,
+  "root": "./sites/home",
+  "protectedPaths": [
+    { "path": "/reports", "user": "boss",   "pass": "reportpw", "realm": "Reports" },
+    { "path": "/private/notes.html", "user": "me", "pass": "notespw" }
+  ]
+}
+```
+
+How rules are matched:
+
+| Rule | Protects |
+|---|---|
+| `/reports` | `/reports`, `/reports/`, `/reports/q1.html`, `/reports/2026/summary.pdf`, … |
+| `/private/notes.html` | Only that one file |
+| `/` | The whole site |
+
+- Matching is **case-insensitive** and works on the real file path, so tricks like `/REPORTS`, `/%72eports` or `/./reports` can't bypass a rule.
+- If several rules match, the **most specific (longest) path wins**.
+- A matching rule **replaces** the site-wide login for those URLs (a browser can only send one login per request), so you can give different people access to different areas.
+- Rate limiting applies to URL logins too.
 
 ---
 
@@ -265,8 +343,18 @@ You need:
 | **Shared Token** | *(click Generate)* | Secret shared between server and client — keep this private |
 | **Server Host** | `yourdomain.com` | Auto-filled from Domain field |
 | **TLS on control** | Off | Enable only if your control port uses HTTPS |
+| **Allow self-signed certificate** | Off | Skips certificate checks on the control connection. Development only — leave off in production |
 
-4. Click **Save Config** — this writes `tunnel/tunnel-config.json` locally
+Optional settings you can add by hand to the `server` block of `tunnel-config.json`:
+
+| Field | Default | Description |
+|---|---|---|
+| `maxBodyBytes` | `10485760` (10 MB) | Larger request bodies get `413 Payload Too Large` |
+| `requestTimeout` | `30000` | Milliseconds to wait for the local site before returning `504` |
+
+![Tunnel Configuration form](docs/screenshots/04-tunnel-config.png)
+
+4. Click **Save Config**. This writes `tunnel/tunnel-config.json` locally, and the dot on the **Tunnel Config** button turns green
 
 5. **Copy the same file to your VPS** at the same relative path:
    ```bash
@@ -336,8 +424,11 @@ node tunnel/client.js \
   --control-port 7000 \
   --token YOUR_SECRET \
   --subdomain mysite \
-  --tls
+  --tls \
+  --insecure        # accept a self-signed cert (dev only)
 ```
+
+If the connection drops, the client reconnects automatically, waiting 3 s, then 6 s, 12 s … up to 60 s between attempts.
 
 Output:
 
@@ -359,6 +450,7 @@ Press `Ctrl+C` to stop the tunnel.
 | Request times out | Returns `504 Gateway Timeout` after 30 seconds |
 | Site has Basic Auth | Auth challenge is preserved end-to-end |
 | Wrong tunnel token | Server rejects with `401 Unauthorized` |
+| Request body over `maxBodyBytes` | Returns `413 Payload Too Large` |
 
 ---
 
@@ -388,11 +480,26 @@ Or use a simple `systemd` unit file — see your distro's documentation.
 ## Security Notes
 
 - **`tunnel/tunnel-config.json` is gitignored** — it contains your token and cert paths and should never be committed
-- Change **all default passwords** before deploying publicly
+- Change **all default passwords** before deploying publicly — the server prints a warning while the manager uses the default
 - The shared tunnel token should be at least 32 random characters — use the **Generate** button in the UI
-- Rate limiting is per-IP per-port; the 5-attempt / 10-minute window applies to tunnelled traffic too
-- Directory traversal attacks (`../`) are blocked with a `403 Forbidden` response
-- Hop-by-hop HTTP headers are stripped when proxying through the tunnel
+- Passwords and tokens are compared in constant time (SHA-256 + `timingSafeEqual`), so neither content nor length leaks through timing
+- Rate limiting is per-IP per-port, persists across restarts, and applies to tunnelled traffic by real client IP
+- Directory traversal (`../`, `%2e%2e`, null bytes) is blocked with `403 Forbidden`
+- The tunnel client verifies the server's TLS certificate unless you explicitly enable insecure mode
+- Hop-by-hop headers are stripped when proxying; `X-Forwarded-For` is overwritten so visitors can't spoof their IP
+- HTTP → HTTPS redirects only ever point at your own domain
+- All servers time out slow requests (10 s for headers, 30 s for the full request)
+- Security headers on every response: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, plus a strict `Content-Security-Policy` on the Site Manager
+
+### Site Manager API protection
+
+- Passwords are **never returned** by the API, so leave a password blank when editing to keep it
+- No CORS headers are sent, so other websites can't read API responses
+- Every state-changing API call (`POST`/`PUT`/`DELETE`) must include the header `X-Requested-With: RoWeb`, and a cross-site `Origin` is rejected. This blocks CSRF. If you script against the API, add the header:
+  ```bash
+  curl -u admin:manager123 -H "X-Requested-With: RoWeb" -X DELETE http://localhost:4000/api/sites/3002
+  ```
+- Requests whose `Host` isn't `localhost`, an IP address, or listed in `manager.allowedHosts` are rejected (DNS-rebinding protection)
 
 ---
 
@@ -402,7 +509,7 @@ Or use a simple `systemd` unit file — see your distro's documentation.
 
 | Site | Port | Username | Password |
 |---|---|---|---|
-| Public Home | 3000 | `guest` | `home123` |
+| Public Home | 3000 | — (open) | — |
 | Admin Dashboard | 3001 | `admin` | `secret123` |
 | Internal Wiki | 3002 | `team` | `wiki2024` |
 | **Site Manager** | **4000** | **`admin`** | **`manager123`** |
