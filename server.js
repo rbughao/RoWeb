@@ -8,7 +8,7 @@ const path = require('path');
 const { checkAuth, pickAuth }           = require('./lib/auth');
 const { resolveFilePath, canonicalize, rootProblem, serveFile, sendStatus } = require('./lib/fileServer');
 const { printStartupTable, logRequest } = require('./lib/logger');
-const { createManagerServer }           = require('./lib/manager');
+const { createManagerServer, SUBDOMAIN_RE } = require('./lib/manager');
 const { setSiteHeaders }                = require('./lib/securityHeaders');
 const passwords                         = require('./lib/passwords');
 
@@ -34,8 +34,22 @@ if (!Array.isArray(config.sites) || config.sites.length === 0) {
 }
 
 const sitesDir = config.sitesDir || './sites';
+const tunnelAddresses = new Map(); // subdomain → site name
 
 for (const site of config.sites) {
+  if (site.tunnel && site.tunnel.subdomain) {
+    const sub = String(site.tunnel.subdomain).toLowerCase();
+    if (!SUBDOMAIN_RE.test(sub)) {
+      console.error(`Site "${site.name}": tunnel address "${site.tunnel.subdomain}" may use only letters, numbers and hyphens.`);
+      process.exit(1);
+    }
+    // Two tunnels asking for one address would keep taking it from each other
+    if (tunnelAddresses.has(sub)) {
+      console.error(`Sites "${tunnelAddresses.get(sub)}" and "${site.name}" both use tunnel address "${sub}".`);
+      process.exit(1);
+    }
+    tunnelAddresses.set(sub, site.name);
+  }
   if (!site.name || !site.port || !site.root) {
     console.error(`Invalid site entry (missing name, port, or root): ${JSON.stringify(site)}`);
     process.exit(1);

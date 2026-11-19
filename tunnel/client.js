@@ -60,6 +60,8 @@ function startTunnel(options) {
     let activeSocket = null;
     let pingTimer    = null;
     let retryDelay   = RECONNECT_MIN;
+    // After the first connection, ask for the address we were given so shared links keep working
+    let wantedSubdomain = preferredSubdomain;
 
     function scheduleReconnect(reason) {
       if (stopped) return;
@@ -102,6 +104,7 @@ function startTunnel(options) {
 
             case TYPES.HELLO_ACK:
               retryDelay = RECONNECT_MIN;
+              wantedSubdomain = payload.subdomain;
               clearInterval(pingTimer);
               pingTimer = setInterval(() => {
                 if (activeSocket && !activeSocket.destroyed) {
@@ -149,7 +152,7 @@ function startTunnel(options) {
         sock.write(encode(TYPES.HELLO, 0, {
           token,
           localPort,
-          subdomain: preferredSubdomain,
+          subdomain: wantedSubdomain,
         }));
       });
 

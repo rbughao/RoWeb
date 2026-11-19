@@ -82,8 +82,12 @@ function newReqId() {
   return id;
 }
 
+function cleanSubdomain(preferred) {
+  return String(preferred || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32);
+}
+
 function assignSubdomain(preferred) {
-  const candidate = String(preferred || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32);
+  const candidate = cleanSubdomain(preferred);
   if (candidate && !tunnels.has(candidate)) return candidate;
   let sub;
   do { sub = crypto.randomBytes(4).toString('hex'); } while (tunnels.has(sub));
@@ -131,6 +135,16 @@ controlServer.on('upgrade', (req, socket, head) => {
           socket.write(encode(TYPES.ERROR, 0, { message: 'Already registered on this connection.' }));
           break;
         }
+        // A reconnecting client takes its address back. The previous connection is usually
+        // dead but not yet detected (that takes up to ~60s of missed pings), so close it.
+        // Only holders of the shared token get this far.
+        const wanted = cleanSubdomain(payload.subdomain);
+        const holder = wanted && tunnels.get(wanted);
+        if (holder && holder.socket !== socket) {
+          tunnels.delete(wanted);
+          holder.socket.destroy();
+          console.log(`[~] ${wanted}.${domain} reclaimed by a new connection`);
+        }
         subdomain = assignSubdomain(payload.subdomain);
         const publicUrl = `https://${subdomain}.${domain}`;
         tunnels.set(subdomain, { socket, parser, pending, inflight: 0 });
@@ -168,7 +182,8 @@ controlServer.on('upgrade', (req, socket, head) => {
   });
 
   socket.on('close', () => {
-    if (subdomain) {
+    // Only unregister if this connection still owns the address (it may have been reclaimed)
+    if (subdomain && tunnels.get(subdomain)?.socket === socket) {
       tunnels.delete(subdomain);
       console.log(`[-] Disconnected: ${subdomain}.${domain}`);
     }

@@ -639,6 +639,13 @@
         </div>
       </div>
 
+      <div class="field">
+        <label for="f-subdomain">Tunnel address <span style="font-weight:400;text-transform:none">(optional — keeps the public link the same every time)</span></label>
+        <input id="f-subdomain" name="subdomain" type="text" placeholder="e.g. qrcoder" autocomplete="off" spellcheck="false"
+          oninput="updateSubdomainHint()" aria-describedby="f-subdomain-hint">
+        <span class="path-hint" id="f-subdomain-hint">Leave blank for a random address.</span>
+      </div>
+
       <!-- Auth toggle -->
       <div class="toggle-row">
         <label for="f-auth-toggle">
@@ -891,8 +898,7 @@
       empty.innerHTML = !site
         ? '<strong>Select a site</strong><span>Click a site on the left to preview it here.</span>'
         : site.paused
-          ? `<strong>This site is paused</strong><span>It isn't being served to anyone right now.</span>
-             <button class="btn btn-primary" style="margin-top:.75rem" onclick="setPaused(${site.port}, false, this)">▶ Resume site</button>`
+          ? `<strong>This site is paused</strong><span>It isn't being served to anyone right now. To serve it again, use <b>▶ Resume</b> on the site in the list.</span>`
           : '<strong>This site is stopped</strong><span>Its port may be in use by another program. Edit the site to choose another port.</span>';
       empty.classList.remove('hidden');
       frame.classList.add('hidden');
@@ -980,6 +986,7 @@
     document.getElementById('modal-title').textContent = 'Add Site';
     document.getElementById('submit-btn').textContent = 'Add Site';
     document.getElementById('site-form').reset();
+    updateSubdomainHint();
     document.getElementById('f-pass').placeholder = 'secret';
     document.getElementById('path-rules').innerHTML = '';
     hideAuthFields();
@@ -1000,6 +1007,8 @@
     document.getElementById('f-port').value  = site.port;
     document.getElementById('f-root').value  = site.root;
     document.getElementById('f-index').value = site.index || '';
+    document.getElementById('f-subdomain').value = (site.tunnel && site.tunnel.subdomain) || '';
+    updateSubdomainHint();
 
     const hasAuth = !!site.auth;
     document.getElementById('f-auth-toggle').checked = hasAuth;
@@ -1145,6 +1154,9 @@
     };
     const idx = document.getElementById('f-index').value.trim();
     if (idx) site.index = idx;
+    // null (not omitted) so clearing the field removes a saved address
+    const sub = document.getElementById('f-subdomain').value.trim().toLowerCase();
+    site.tunnel = sub ? { subdomain: sub } : null;
 
     if (document.getElementById('f-auth-toggle').checked) {
       site.auth = {
@@ -1349,10 +1361,20 @@
     }
   }
 
+  let tunnelDomain = '';
+
+  function updateSubdomainHint() {
+    const sub  = document.getElementById('f-subdomain').value.trim().toLowerCase();
+    const hint = document.getElementById('f-subdomain-hint');
+    const host = tunnelDomain || 'yourdomain.com';
+    hint.textContent = sub ? `Public link: https://${sub}.${host}` : 'Leave blank for a random address.';
+  }
+
   function updateTunnelCfgStatus(cfg) {
     const dot = document.getElementById('tunnel-cfg-status');
     if (!dot) return;
     const s = cfg && cfg.server;
+    tunnelDomain = (s && s.domain && s.domain !== PLACEHOLDER_DOMAIN) ? s.domain : '';
     const configured = s && s.domain && s.domain !== PLACEHOLDER_DOMAIN
                         && s.token  && s.token  !== PLACEHOLDER_TOKEN
                         && s.certFile && s.keyFile;
